@@ -3,49 +3,32 @@
 #include <Wire.h>
 
 
-long lastTime = millis();
-Adafruit_LSM9DS0 imu = Adafruit_LSM9DS0();
-int waitTime = 2000;
-int cycle = 0;
-int ledState = LOW;
-int recentSlaveCom = 0;
 
-//Pinout Numbers
-const int DoorSens = 13;
-const int Battery = 14;
-const int RBRx = 0; const int RBTx = 1; const int RBSleep = 22;
-const int RB_RI = 23; const int RB_RTS = 24; const int RB_CTS = 6;
-const int SDApin = 20;
-const int SCLpin = 21;
-
-//Downlink Test Placeholders
-int DLTime = 3000;
-int lastDLTime = 0;
-float placeHolderBattery = 0.3;
-float placeHolderSolarXPlus = .1;
-float placeHolderSolarXMinus = .2;
-float placeHolderSolarYPlus = .3;
-float placeHolderSolarYMinus = .4;
-float placeHolderSolarZPlus = .5;
-float placeHolderSolarZMinus = .6;
-int placeHolderDoorSense = 1;
-float placeHolderLightSense = 5.5;
-float placeHolderAnalogTemp = 21.0;
-int placeHoldernumPhotos = 10;
-
-//
-//  int DC = 1
-//  int IDLE_COM = 2
-//
-//  //Downlink Flags
-//  const int HEALTH = 1
-//  const int GPS = 2
-//  const int IMAGE = 3
-//  const int LOW_POWER = 4;
-//  const int current_DLFlags[2] = {0,0} //Distribute Later
-//
-//  //Operating Parameters
-//  int DL_ATTEMPT_TIME = 10*60*1000 //Millis to try to downlink
+class commandBuffer {
+  public:
+    int commandStack[100][2];
+    int openSpot;
+    commandBuffer() {
+      //int cB[1000][2] = {0};
+      //commandStack = cB;
+      openSpot = 0;
+    }
+    void print() {
+      int i = 0;
+      Serial.print("cBuf = [");
+      while (i < 100) {
+        if (commandStack[i][0] == 0 && commandStack[i][1] == 0) {
+          break;
+        }
+        Serial.print(commandStack[i][0]);
+        Serial.print(":");
+        Serial.print(commandStack[i][1]);
+        Serial.print("|");
+        i++;
+      }
+      Serial.println("]");
+    }
+};
 
 class floatTuple
 {
@@ -120,6 +103,50 @@ class sensorDataDownlink
     }
 };
 
+////Constant Initialization
+commandBuffer cBuf = commandBuffer();
+long lastTime = millis();
+Adafruit_LSM9DS0 imu = Adafruit_LSM9DS0();
+int waitTime = 2000;
+int cycle = 0;
+int ledState = LOW;
+int recentSlaveCom = 0;
+
+//Pinout Numbers
+const int DoorSens = 13;
+const int Battery = 14;
+const int RBRx = 0; const int RBTx = 1; const int RBSleep = 22;
+const int RB_RI = 23; const int RB_RTS = 24; const int RB_CTS = 6;
+const int SDApin = 20;
+const int SCLpin = 21;
+
+//Downlink Test Placeholders
+int DLTime = 3000;
+int lastDLTime = 0;
+float placeHolderBattery = 0.3;
+float placeHolderSolarXPlus = .1;
+float placeHolderSolarXMinus = .2;
+float placeHolderSolarYPlus = .3;
+float placeHolderSolarYMinus = .4;
+float placeHolderSolarZPlus = .5;
+float placeHolderSolarZMinus = .6;
+int placeHolderDoorSense = 1;
+float placeHolderLightSense = 5.5;
+float placeHolderAnalogTemp = 21.0;
+int placeHoldernumPhotos = 10;
+
+//  int DC = 1
+//  int IDLE_COM = 2
+//
+//  //Downlink Flags
+//  const int HEALTH = 1
+//  const int GPS = 2
+//  const int IMAGE = 3
+//  const int LOW_POWER = 4;
+//  const int current_DLFlags[2] = {0,0} //Distribute Later
+//
+//  //Operating Parameters
+//  int DL_ATTEMPT_TIME = 10*60*1000 //Millis to try to downlink
 
 int getTempDegrees(int TempPin) {
   // Returns the temperature of the sensor at pin senseTemp
@@ -255,9 +282,147 @@ int getCurrentAmp(int CurrentPin) { //NEEDS RESCALE
   return current;
 }
 
+////Parser Functions
+void buildBuffer(String com)
+{
+  int commandData;
+  int commandType;
+  String comRemaining = com;
+  bool loop = true;
+  while (loop) {
+    commandType = (com.substring(0, com.indexOf(","))).toInt();
+    commandData = (com.substring(com.indexOf(",") + 1, com.indexOf("."))).toInt();
+    cBuf.commandStack[cBuf.openSpot][0] = commandType;
+    cBuf.commandStack[cBuf.openSpot][1] = commandData;
+    if (com.indexOf(".") == com.length() - 1) {
+      loop = false;
+      Serial.println("Finished Adding88888 Commands");
+    } else {
+      com = com.substring(com.indexOf(".") + 1);
+    }
+    cBuf.openSpot++;
+  }
+}
+
+boolean isInputValid(String input) {
+  //Check if incoming command is valid
+  int lastPunc = 0; //1 if ",", 2 if ".", 0 Otherwise
+  bool valid = true;
+  int q = 0;
+  int l = input.length();
+
+  while (q < l) {
+    char currentChar = input[q];
+    q++;
+    if (isPunct(currentChar)) {
+      if (currentChar == (',')) {
+        //Check if last was a period
+        //Serial.println("Comma Found");
+        if (lastPunc == 0 || lastPunc == 2) {
+          //Serial.println("Comma OK");
+          lastPunc = 1;
+        } else {
+          //Serial.println("2 Commas");
+          valid = false;
+          break;
+        }
+      } else if (currentChar == ('.')) {
+        //Serial.println("Period Found");
+        if (lastPunc == 1) {
+          //Serial.println("Period ok");
+          lastPunc = 2;
+        } else {
+          //Serial.println("2 Periods or No prior comma");
+          valid = false;
+          break;
+        }
+      } else {
+        //Serial.println("Invalid Punc");
+        valid = false;
+        break;
+      }
+    }
+    if (isAlpha(currentChar)) {
+      //Serial.println("Alpha");
+      valid = false;
+      break;
+    }
+    if (currentChar == ('0')) {
+      //Serial.println("Zero");
+      valid = false;
+      break;
+    }
+    if (isSpace(currentChar)) {
+      //Serial.println("Space");
+      valid = false;
+      break;
+    }
+    //Detect no ending period
+    if (q == input.length() - 1) {
+      if (input[q] != '.') {
+        //Serial.println("No Ending");
+        valid = false;
+        break;
+      }
+    }
+    if (currentChar == '\0' && q != input.length() - 1) {
+      //Null Character in the middle
+      valid = false;
+      break;
+    }
+  }
+  return valid;
+}
+
+void popCommand() {
+  //Process an Incoming Command
+  Serial.println ("Executing Command:");
+  if (cBuf.openSpot > 0) {
+    Serial.println (cBuf.openSpot - 1);
+    int currentCommand[2] = {cBuf.commandStack[cBuf.openSpot - 1][0], cBuf.commandStack[cBuf.openSpot - 1][1]};
+    Serial.print(currentCommand[0]);
+    Serial.print(":");
+    Serial.println(currentCommand[1]);
+    cBuf.commandStack[cBuf.openSpot - 1][0] = 0;
+    cBuf.commandStack[cBuf.openSpot - 1][1] = 0;
+    cBuf.openSpot --;
+  } else {
+    Serial.println("No Command");
+  }
+}
+
+void readSerialAdd2Buffer() {
+  if (Serial.available() > 0) {
+    Serial.println("Recieving Command");
+    String comString = "";
+    while (Serial.available() > 0) {
+      // get the new byte:
+      char inChar = (char)Serial.read();
+      // add it to the inputString:
+      comString += inChar;
+    }
+    if (isInputValid(comString)) {
+      Serial.println("Command is Valid");
+      buildBuffer(comString);
+      Serial.println("Built Command Buffer Successfully");
+    } else {
+      Serial.println("Invalid Command");
+    }
+  }
+}
+
+
+
+int popTime = 4000;
+int lastpopTime = 0;
+
 void loop()
 {
-
+  readSerialAdd2Buffer();
+  if (millis() - lastDLTime >= DLTime) {
+    popCommand();
+  }
+  
   //Testing IM
   //floatTuple mag = getMagData(imu, waitTime);
   //floatTuple gyro = getGyroData(imu, waitTime);
@@ -293,8 +458,8 @@ void loop()
     Serial.println(DLS.length());
     Serial.println(millis() - lastDLTime);
     lastDLTime = millis();
-    
-    
+
+
   }
 
   //Testing Iterators
@@ -303,6 +468,8 @@ void loop()
   //Serial.print("C: ");
   //Serial.println(cycle);
 }
+///////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 
 
 
