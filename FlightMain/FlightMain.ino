@@ -85,9 +85,9 @@ class commandBuffer {
 
 /* 
  * ===  Class  =========================================================================
- *         Name:  commandBuffer
- *  Constructor:  No Inputs
- *  Description:  Stores commands that come in over Serial in a Stack format
+ *         Name:  floatTuple
+ *  Constructor:  3 floats to be x, y, and z
+ *  Description:  Stores 3 floats in a tuple accessable as <name>.x etc
  * =====================================================================================
  */
 class floatTuple
@@ -109,6 +109,13 @@ class floatTuple
     }
 };
 
+/* 
+ * ===  Class  =========================================================================
+ *         Name:  sensorDataDownlink
+ *  Constructor:  3 floats to be x, y, and z
+ *  Description:  Stores 3 floats in a tuple accessable as <name>.x etc
+ * =====================================================================================
+ */
 class sensorDataDownlink
 {
     //floatTuple gyro;
@@ -492,36 +499,7 @@ void loop()
     Serial.println(millis() - lastDLTime);
     lastDLTime = millis();
   }
-void deploy (){
-//Serial.println("Executing Deployment");
 
-    // start passive timer for 90000 seconds (min and a half)
-    
-//wT = 60000;
-    // set wait time on all insturments to 1 min
-    
-//getTempDegrees
-//getMagData
-//getGyroData
-//getImuTempData
-    //activate all sensors
-
-//!!no camera code yet!!
-
-    //set camera to take a picture every second for 10 seconds
-
-    //activate camera
-
-//int doorTrig = 5
-    //this would go to the top /\
-//digitalWrite(doorTrig,HIGH);
-    //activate door release
-    
-// if (Doorsense = HIGH){
-//Serial.println("Door Release Confirmed"); }
-
-    //once timer is finished, transmit data
-}
   //Testing Iterators
   recentSlaveCom--;
   cycle++;
@@ -529,3 +507,16 @@ void deploy (){
   //Serial.println(cycle);
 }
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+
+
+
+
+
+
+
+
+
+
+
