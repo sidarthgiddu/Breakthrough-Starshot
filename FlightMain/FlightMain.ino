@@ -492,7 +492,36 @@ void loop()
     Serial.println(millis() - lastDLTime);
     lastDLTime = millis();
   }
+void deploy (){
+//Serial.println("Executing Deployment");
 
+    // start passive timer for 90000 seconds (min and a half)
+    
+//wT = 60000;
+    // set wait time on all insturments to 1 min
+    
+//getTempDegrees
+//getMagData
+//getGyroData
+//getImuTempData
+    //activate all sensors
+
+//!!no camera code yet!!
+
+    //set camera to take a picture every second for 10 seconds
+
+    //activate camera
+
+//int doorTrig = 5
+    //this would go to the top /\
+//digitalWrite(doorTrig,HIGH);
+    //activate door release
+    
+// if (Doorsense = HIGH){
+//Serial.println("Door Release Confirmed"); }
+
+    //once timer is finished, transmit data
+}
   //Testing Iterators
   recentSlaveCom--;
   cycle++;
@@ -500,16 +529,3 @@ void loop()
   //Serial.println(cycle);
 }
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-
-
-
-
-
-
-
-
-
-
-
-
