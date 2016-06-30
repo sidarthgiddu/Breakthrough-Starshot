@@ -2,11 +2,57 @@
 #include <Adafruit_Sensor.h>
 #include <Wire.h>
 
+////Constant Initialization
+
+long lastTime = millis();
+Adafruit_LSM9DS0 imu = Adafruit_LSM9DS0();
+int waitTime = 2000;
+int cycle = 0;
+int ledState = LOW;
+int recentSlaveCom = 0;
+int manualTimeout = 3000;
+bool imuWorking = true;
+
+//Pinout Numbers
+const int DoorSens = 13;
+const int Battery = 14;
+const int RBRx = 0; const int RBTx = 1; const int RBSleep = 22;
+const int RB_RI = 23; const int RB_RTS = 24; const int RB_CTS = 6;
+const int SDApin = 20;
+const int SCLpin = 21;
+
+//Downlink Test Placeholders
+int DLTime = 3000;
+int lastDLTime = 0;
+float placeHolderBattery = 0.3;
+float placeHolderSolarXPlus = .1;
+float placeHolderSolarXMinus = .2;
+float placeHolderSolarYPlus = .3;
+float placeHolderSolarYMinus = .4;
+float placeHolderSolarZPlus = .5;
+float placeHolderSolarZMinus = .6;
+int placeHolderDoorSense = 1;
+float placeHolderLightSense = 5.5;
+float placeHolderAnalogTemp = 21.0;
+int placeHoldernumPhotos = 10;
+
+//  int DC = 1
+//  int IDLE_COM = 2
+//
+//  //Downlink Flags
+//  const int HEALTH = 1
+//  const int GPS = 2
+//  const int IMAGE = 3
+//  const int LOW_POWER = 4;
+//  const int current_DLFlags[2] = {0,0} //Distribute Later
+//
+//  //Operating Parameters
+//  int DL_ATTEMPT_TIME = 10*60*1000 //Millis to try to downlink
 
 
 class commandBuffer {
   public:
-    int commandStack[100][2];
+    int commandStack[200][2];
     int openSpot;
     commandBuffer() {
       //int cB[1000][2] = {0};
@@ -16,7 +62,8 @@ class commandBuffer {
     void print() {
       int i = 0;
       Serial.print("cBuf = [");
-      while (i < 100) {
+      int endT = millis() + manualTimeout;
+      while (i < 200 && millis() < endT) {
         if (commandStack[i][0] == 0 && commandStack[i][1] == 0) {
           break;
         }
@@ -29,6 +76,7 @@ class commandBuffer {
       Serial.println("]");
     }
 };
+commandBuffer cBuf;
 
 class floatTuple
 {
@@ -103,50 +151,6 @@ class sensorDataDownlink
     }
 };
 
-////Constant Initialization
-commandBuffer cBuf = commandBuffer();
-long lastTime = millis();
-Adafruit_LSM9DS0 imu = Adafruit_LSM9DS0();
-int waitTime = 2000;
-int cycle = 0;
-int ledState = LOW;
-int recentSlaveCom = 0;
-
-//Pinout Numbers
-const int DoorSens = 13;
-const int Battery = 14;
-const int RBRx = 0; const int RBTx = 1; const int RBSleep = 22;
-const int RB_RI = 23; const int RB_RTS = 24; const int RB_CTS = 6;
-const int SDApin = 20;
-const int SCLpin = 21;
-
-//Downlink Test Placeholders
-int DLTime = 3000;
-int lastDLTime = 0;
-float placeHolderBattery = 0.3;
-float placeHolderSolarXPlus = .1;
-float placeHolderSolarXMinus = .2;
-float placeHolderSolarYPlus = .3;
-float placeHolderSolarYMinus = .4;
-float placeHolderSolarZPlus = .5;
-float placeHolderSolarZMinus = .6;
-int placeHolderDoorSense = 1;
-float placeHolderLightSense = 5.5;
-float placeHolderAnalogTemp = 21.0;
-int placeHoldernumPhotos = 10;
-
-//  int DC = 1
-//  int IDLE_COM = 2
-//
-//  //Downlink Flags
-//  const int HEALTH = 1
-//  const int GPS = 2
-//  const int IMAGE = 3
-//  const int LOW_POWER = 4;
-//  const int current_DLFlags[2] = {0,0} //Distribute Later
-//
-//  //Operating Parameters
-//  int DL_ATTEMPT_TIME = 10*60*1000 //Millis to try to downlink
 
 int getTempDegrees(int TempPin) {
   // Returns the temperature of the sensor at pin senseTemp
@@ -231,6 +235,7 @@ void initalizePinOut() {
   const int SolarYMinus = A4; pinMode(SolarYMinus, INPUT); //Solar Current Y-
   const int SolarZPlus = A5; pinMode(SolarZPlus, INPUT); //Solar Current Z+
   const int SolarZMinus = 9; pinMode(SolarZMinus, INPUT); //Solar Current Z-
+  const int SlaveReset = 10; pinMode(SolarZMinus, OUTPUT); //Slave Fault Handing (via Hard Reset)
 }
 
 
@@ -243,8 +248,13 @@ void setup()
   //attachInterrupt(digitalPinToInterrupt(9), sendCommandToSlave, LOW);
 
   //Try to initialize and warn if we couldn't detect the chip
-  while (!imu.begin());
+  int endT = millis() + manualTimeout;
+  while (!imu.begin() && millis() < endT);
+  if (!imu.begin()) {
+    imuWorking = false;
+  }
 
+  cBuf = commandBuffer();
   initalizePinOut();
   configureSensor(); //runs configureSensor function
   pinMode(A3, INPUT); //Temperature Sensor
@@ -310,10 +320,16 @@ boolean isInputValid(String input) {
   bool valid = true;
   int q = 0;
   int l = input.length();
-
+  int endT = manualTimeout + millis();
   while (q < l) {
     char currentChar = input[q];
     q++;
+    
+    if (millis() > endT) {
+      valid = false;
+      break;
+    }
+
     if (isPunct(currentChar)) {
       if (currentChar == (',')) {
         //Check if last was a period
@@ -422,7 +438,7 @@ void loop()
   if (millis() - lastDLTime >= DLTime) {
     popCommand();
   }
-  
+
   //Testing IM
   //floatTuple mag = getMagData(imu, waitTime);
   //floatTuple gyro = getGyroData(imu, waitTime);
@@ -442,7 +458,7 @@ void loop()
   }
 
   //Testing IMU and Sensor Downlink String Generator
-  if (millis() - lastDLTime >= DLTime) {
+  if (millis() - lastDLTime >= DLTime && imuWorking) {
     lastDLTime = millis();
     floatTuple mag = getMagData(imu, waitTime);
     floatTuple gyro = getGyroData(imu, waitTime);
@@ -458,8 +474,6 @@ void loop()
     Serial.println(DLS.length());
     Serial.println(millis() - lastDLTime);
     lastDLTime = millis();
-
-
   }
 
   //Testing Iterators
