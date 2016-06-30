@@ -49,7 +49,13 @@ int placeHoldernumPhotos = 10;
 //  //Operating Parameters
 //  int DL_ATTEMPT_TIME = 10*60*1000 //Millis to try to downlink
 
-
+/* 
+ * ===  Class  =========================================================================
+ *         Name:  commandBuffer
+ *  Constructor:  No Inputs
+ *  Description:  Stores commands that come in over Serial in a Stack format
+ * =====================================================================================
+ */
 class commandBuffer {
   public:
     int commandStack[200][2];
@@ -76,8 +82,14 @@ class commandBuffer {
       Serial.println("]");
     }
 };
-commandBuffer cBuf;
 
+/* 
+ * ===  Class  =========================================================================
+ *         Name:  commandBuffer
+ *  Constructor:  No Inputs
+ *  Description:  Stores commands that come in over Serial in a Stack format
+ * =====================================================================================
+ */
 class floatTuple
 {
   public:
@@ -114,10 +126,12 @@ class sensorDataDownlink
     float LightSense;
     float AnalogTemp;
     int numPhotos;
+    int IMUWorking;
 
   public:
     sensorDataDownlink(floatTuple g, floatTuple M, int IT, float B, float SolarXP, float SolarXM,
-                       float SolarYP, float SolarYM, float SolarZP, float SolarZM, int DS, float LS, float AT, int nP) {
+                       float SolarYP, float SolarYM, float SolarZP, float SolarZM, int DS, float LS, 
+                       float AT, int nP, bool IMUW) {
       Gyro[0] = g.x; Gyro[1] = g.y; Gyro[2] = g.z;
       Mag[0] = M.x; Mag[1] = M.y; Mag[2] = M.z;
       ImuTemp = IT;
@@ -132,13 +146,14 @@ class sensorDataDownlink
       LightSense = LS;
       AnalogTemp = AT;
       numPhotos = nP;
+      IMUWorking = IMUW; 
     }
     String toString() {
       //Produces ASCII Output for Downlink
       String output = "";
       output += "Sensor Downlink |";
-      output += "GX:" + String(Gyro[0]) + "|GY:" + String(Gyro[1]) + "|GyroZ:" + String(Gyro[2]) + "|";
-      output += "MX:" + String(Mag[0]) + "|GyroY:" + String(Mag[1]) + "|GyroZ:" + String(Mag[2]) + "|";
+      output += "GX:" + String(Gyro[0]) + "|GY:" + String(Gyro[1]) + "|GZ:" + String(Gyro[2]) + "|";
+      output += "MX:" + String(Mag[0]) + "|MY:" + String(Mag[1]) + "|MZ:" + String(Mag[2]) + "|";
       output += "IT:" + String(ImuTemp) + "|";
       output += "B:" + String(Battery) + "|";
       output += "SX+:" + String(SolarXPlus) + "|SX-:" + String(SolarXMinus) +
@@ -147,10 +162,10 @@ class sensorDataDownlink
       output += "DS:" + String(DoorSense) + "|";
       output += "LS:" + String(AnalogTemp) + "|";
       output += "nP:" + String(numPhotos) + "|";
+      output += "IW:" + String(IMUWorking) + "|";
       return output;
     }
 };
-
 
 int getTempDegrees(int TempPin) {
   // Returns the temperature of the sensor at pin senseTemp
@@ -238,40 +253,6 @@ void initalizePinOut() {
   const int SlaveReset = 10; pinMode(SolarZMinus, OUTPUT); //Slave Fault Handing (via Hard Reset)
 }
 
-
-void setup()
-{
-  //Testing Code
-  Serial.begin(9600); //Will Use for RockBlock
-  //pinMode(12, INPUT_PULLUP);
-  //attachInterrupt(digitalPinToInterrupt(12), forceSerialOff, LOW);
-  //attachInterrupt(digitalPinToInterrupt(9), sendCommandToSlave, LOW);
-
-  //Try to initialize and warn if we couldn't detect the chip
-  int endT = millis() + manualTimeout;
-  while (!imu.begin() && millis() < endT);
-  if (!imu.begin()) {
-    imuWorking = false;
-  }
-
-  cBuf = commandBuffer();
-  initalizePinOut();
-  configureSensor(); //runs configureSensor function
-  pinMode(A3, INPUT); //Temperature Sensor
-  Wire.begin(); //Start i2c as master
-
-}
-
-//Testing Forced Terminator
-void forceSerialOff() {
-  digitalWrite(13, LOW);
-  Serial.println("Force Terminated");
-  Serial.end();
-  while (1) {
-    delay(200);
-  }
-}
-
 //Testing Slave Communication
 void sendCommandToSlave() { //Interrupt Pin
   if (!recentSlaveCom) {
@@ -324,7 +305,7 @@ boolean isInputValid(String input) {
   while (q < l) {
     char currentChar = input[q];
     q++;
-    
+
     if (millis() > endT) {
       valid = false;
       break;
@@ -427,7 +408,39 @@ void readSerialAdd2Buffer() {
   }
 }
 
+//Testing Forced Terminator
+void forceSerialOff() {
+  digitalWrite(13, LOW);
+  Serial.println("Force Terminated");
+  Serial.end();
+  while (1) {
+    delay(200);
+  }
+}
 
+commandBuffer cBuf;
+void setup()
+{
+  //Testing Code
+  Serial.begin(9600); //Will Use for RockBlock
+  //pinMode(12, INPUT_PULLUP);
+  //attachInterrupt(digitalPinToInterrupt(12), forceSerialOff, LOW);
+  //attachInterrupt(digitalPinToInterrupt(9), sendCommandToSlave, LOW);
+
+  //Try to initialize and warn if we couldn't detect the chip
+  int endT = millis() + manualTimeout;
+  while (!imu.begin() && millis() < endT);
+  if (!imu.begin()) {
+    imuWorking = false;
+  }
+
+  cBuf = commandBuffer();
+  initalizePinOut();
+  configureSensor(); //runs configureSensor function
+  pinMode(A3, INPUT); //Temperature Sensor
+  Wire.begin(); //Start i2c as master
+
+}
 
 int popTime = 4000;
 int lastpopTime = 0;
@@ -460,14 +473,18 @@ void loop()
   //Testing IMU and Sensor Downlink String Generator
   if (millis() - lastDLTime >= DLTime && imuWorking) {
     lastDLTime = millis();
-    floatTuple mag = getMagData(imu, waitTime);
-    floatTuple gyro = getGyroData(imu, waitTime);
+    floatTuple mag = floatTuple(0,0,0);
+    floatTuple gyro = floatTuple(0,0,0);
+    if (imuWorking) {
+      mag = getMagData(imu, waitTime);
+      gyro = getGyroData(imu, waitTime);
+    }
     int temp1 = getImuTempData(imu, waitTime);
 
     sensorDataDownlink DL =
       sensorDataDownlink(gyro, mag, temp1, placeHolderBattery, placeHolderSolarXPlus, placeHolderSolarXMinus,
                          placeHolderSolarYPlus, placeHolderSolarYMinus, placeHolderSolarZPlus, placeHolderSolarZMinus,
-                         placeHolderDoorSense, placeHolderLightSense, placeHolderAnalogTemp, placeHoldernumPhotos);
+                         placeHolderDoorSense, placeHolderLightSense, placeHolderAnalogTemp, placeHoldernumPhotos,imuWorking);
     Serial.println("Downlink String: ");
     String DLS = DL.toString();
     Serial.println(DLS);
