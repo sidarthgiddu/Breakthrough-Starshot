@@ -9,6 +9,8 @@ int ledState = LOW;
 int manualTimeout = 10 * 1000;
 int SlaveResets = 0;
 int deployTimeOut = 30 * 1000;
+bool hardwareAvTable[8] = {1}; //Hardware Avaliability Table
+//[Imu, SX+,SX-,SY+, SY-, SZ+, SZ-,Temp]
 
 //IMU and Sensor Test
 bool SensorFetch = false;
@@ -272,11 +274,49 @@ void initalizePinOut() {
   const int DoorMagEnable = 11; pinMode(DoorMagEnable, OUTPUT); //Allow Door Magnetorquer to work
 }
 
-int getCurrentAmp(int CurrentPin) { //NEEDS RESCALE
+float getCurrentAmp(int panel) { //NEEDS RESCALE
   //Returns Amperage of current sensors at senseCurrent 1v/amp (10k resistor)
-  int current = analogRead(CurrentPin);
-  current = map(current, 0, 1, 0, 1);
-  //250 ma min, 430 ma max. 20k resistor might work better...
+  float current;
+  switch (panel) {
+    case 1:
+      if (hardwareAvTable[1]) {
+        current = analogRead(SolarXPlus);
+      } else {
+        current = 999;
+      } break;
+    case 2:
+      if (hardwareAvTable[2]) {
+        current = analogRead(SolarXMinus);
+      } else {
+        current = 999;
+      } break;
+    case 3:
+      if (hardwareAvTable[3]) {
+        current = analogRead(SolarYPlus);
+      } else {
+        current = 999;
+      } break;
+    case 4:
+      if (hardwareAvTable[4]) {
+        current = analogRead(SolarYMinus);
+      } else {
+        current = 999;
+      } break;
+    case 5:
+      if (hardwareAvTable[5]) {
+        current = analogRead(SolarZPlus);
+      } else {
+        current = 999;
+      } break;
+    case 6:
+      if (hardwareAvTable[6]) {
+        current = analogRead(SolarZMinus);
+      } else {
+        current = 999;
+      } break;
+  }
+  current = map(current, 0, 1023, 0, .825); //3.3V=.825A
+  // 4V/A with a 40k Resistor
   return current;
 }
 
@@ -502,10 +542,11 @@ void loop() {
   floatTuple gyro = floatTuple(0, 0, 0);
   float currents[6] = {999};
 
+  //Collect Sensor Data
   if (SensorFetch) {
-    if (imuWorking){
-    mag = getMagData(imu, waitTime);
-    gyro = getGyroData(imu, waitTime);
+    if (imuWorking) {
+      mag = getMagData(imu, waitTime);
+      gyro = getGyroData(imu, waitTime);
     }
     currents[0] = getCurrentAmp(SolarXPlus);
     currents[1] = getCurrentAmp(SolarXMinus);
@@ -513,7 +554,10 @@ void loop() {
     currents[3] = getCurrentAmp(SolarYMinus);
     currents[4] = getCurrentAmp(SolarZPlus);
     currents[5] = getCurrentAmp(SolarZMinus);
+
+    //Request Light/Temp Data From Slave
   }
+
   //readSerialAdd2Buffer();
   //if (millis() - lastPopTime >= popTime) {
   //  popCommand();
