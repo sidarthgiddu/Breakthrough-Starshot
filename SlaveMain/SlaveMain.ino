@@ -296,13 +296,16 @@ void forcedStall(){
   int x = test[78];
   Serial.println(x);
   Serial.println("Didnt crash1");
-  int y = 12/0.0;
+  int y = 12.0/0.0;
   Serial.println(y);
   Serial.println("Didnt crash2");
   int z;
   int crash = z + 4;
   Serial.println(z);
   Serial.println("Didnt crash3");
+  
+
+  
   //while(1);
   digitalWrite(8,LOW); 
   
