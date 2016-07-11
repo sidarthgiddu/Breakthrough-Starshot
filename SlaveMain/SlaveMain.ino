@@ -3,14 +3,150 @@
 #include <Adafruit_Sensor.h>
 //#include <MatrixMath.h>
 
-
+////Constant Initialization
 bool TestReset = false;
+
 int MasterFaultTime = 5 * 60 * 1000;
 int lastMasterCom = 0;
 int resets = 0;
 int manualTimeoutS = 10 * 1000;
 bool imuWorking = true;
+int lightLevel = 0;
+int tempBattery = 0;
+//int numPhotos = 0;
+//int photoInterval = 0;
 
+////Magnetorquer States
+////Maybe FloatTuples
+//int CurXDir = 0; //-1 or 1 for Coil Current Direction
+//int CurXPWM = 0; // 0 to 255 for Coil Current Level
+//int CurYDir = 0; //-1 or 1 for Coil Current Direction
+//int CurYPWM = 0; // 0 to 255 for Coil Current Level
+//int CurZDir = 0; //-1 or 1 for Coil Current Direction
+//int CurZPWM = 0; // 0 to 255 for Coil Current Level
+
+//Slave Pinouts
+const int MasterReset = A4;
+const int CamRx = 0; //Camera Serial into SCom
+const int CamTx = 1; //Camera Serial out of SCom
+const int SDApin = 20; //I2C Data
+const int SCLpin = 21; //I2C Clock
+const int TempS = A0;  //Analog Temp Sensor
+const int LightS = A1; //Analog Light Sensor
+
+const int CX1 = 22; //Coil X Input 1
+const int CX2 = 23; //Coil X Input 2
+const int CY1 = 5; //Coil Y Input 1
+const int CY2 = 6; //Coil Y Input 2
+const int CZ1 = 9; //Coil Z Input 1
+const int CZ2 = 10; //Coil Z Input 2
+
+const int CX_PWM = 11; //Coil X PWM Control
+const int CY_PWM = 12; //Coil Y PWM Control
+const int CZ_PWM = 13; //Coil Z PWM Control
+const int CXY_Enable = A5; //Coil X and Y Enable
+const int CZ_Enable = 24; //Coil Z Enable
+
+int getTempDegrees() {
+  // Returns the temperature of the sensor at pin senseTemp
+  int temp = map(analogRead(TempS), 0, 543, -50, 125); //round?
+  return temp;
+}
+int getLightLvl() {
+  //Returns the lighting of the sensor at pin senselight (10k resistor)
+  int light = map(analogRead(LightS), 0, 775, 100, 0); //2.5 / 3.3 *1023
+  return light;
+}
+
+class floatTuple
+{
+  public:
+    float x;
+    float y;
+    float z;
+
+    floatTuple(float a, float b, float c) {
+      x = a;
+      y = b;
+      z = c;
+    }
+    void print() {
+      Serial.print(x); Serial.print(" ");
+      Serial.print(y); Serial.print(" ");
+      Serial.print(z); Serial.println(" ");
+    }
+};
+
+class slaveStatus
+{
+  public:
+    int Temp;
+    int Light;
+    int mtX;
+    int mtY;
+    int mtZ;
+    int Resets;
+    int numPhotos;
+    int CurXDir; //-1 or 1 for Coil Current Direction
+    int CurXPWM; // 0 to 255 for Coil Current Level
+    int CurYDir; //-1 or 1 for Coil Current Direction
+    int CurYPWM; // 0 to 255 for Coil Current Level
+    int CurZDir; //-1 or 1 for Coil Current Direction
+    int CurZPWM; // 0 to 255 for Coil Current Level
+    float gyro[3];
+    float mag[3];
+
+    slaveStatus(float t, int L, int r, int n, int XD, int XP,
+                int YD, int YP, int ZD, int ZP, floatTuple g, floatTuple M) {
+      Temp = t;
+      Light = L;
+      Resets = r;
+      numPhotos = n;
+      CurXDir = XD;
+      CurXPWM = XP;
+      CurYDir = YD;
+      CurYPWM = YP;
+      CurZDir = ZD;
+      CurZPWM = ZP;
+      gyro[0] = g.x; gyro[1] = g.y; gyro[2] = g.z;
+      mag[0] = M.x; mag[1] = M.y; mag[2] = M.z;
+    }
+    String toString() {
+      String res = "";
+      res += "{MRsts:" + String(resets);
+      res += ",T:" + String(Temp);
+      res += ",L:" + String(Light);
+      res += ",XD:" + String(CurXDir);
+      res += ",YD:" + String(CurYDir);
+      res += ",ZD:" + String(CurZDir);
+      res += ",XP:" + String(CurXPWM);
+      res += ",YP:" + String(CurYPWM);
+      res += ",ZP:" + String(CurZPWM);
+      res += ",nP:" + String(numPhotos);
+      res += "GX:" + String(gyro[0]) + ",GY:" + String(gyro[1]) + ",GZ:" + String(gyro[2]) + ",";
+      res += "MX:" + String(mag[0]) + ",MY:" + String(mag[1]) + ",MZ:" + String(mag[2]) + ",";
+      res += "}||||";
+      return res;
+    }
+    void print() {
+      Serial.println(toString());
+    }
+    void updatePassive() {
+      //Update Internal Information
+      Temp = getTempDegrees();
+      Light = getLightLvl();
+    }
+    void updateTorquers(floatTuple Dir, floatTuple PWM) {
+      CurXDir = Dir.x;
+      CurXPWM = PWM.x;
+      CurYDir = Dir.y;
+      CurYPWM = PWM.y;
+      CurZDir = Dir.z;
+      CurZPWM = PWM.z;
+    }
+};
+slaveStatus StatusHolder = slaveStatus(0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                                       floatTuple(0, 0, 0), floatTuple(0, 0, 0));
 
 class commandBuffer {
   public:
@@ -39,31 +175,12 @@ class commandBuffer {
 };
 commandBuffer cBuf;
 
-class floatTuple
-{
-  public:
-    float x;
-    float y;
-    float z;
-
-    floatTuple(float a, float b, float c) {
-      x = a;
-      y = b;
-      z = c;
-    }
-    void print() {
-      Serial.print(x); Serial.print(" ");
-      Serial.print(y); Serial.print(" ");
-      Serial.print(z); Serial.println(" ");
-    }
-};
-floatTuple MagVectorError = floatTuple(1, 1, 1);
-
 ////////////////////////////////
 ////////////////////////////////
 ////////////////////////////////
 
-//IMU
+//IMU Functionc
+// Currently Invalid (I2C Conflict)
 
 ////////////////////////////////
 ////////////////////////////////
@@ -79,14 +196,14 @@ void buildBuffer(String com)
   bool loop = true;
   while (loop) {
     commandType = (com.substring(0, com.indexOf(","))).toInt();
-    commandData = (com.substring(com.indexOf(",") + 1, com.indexOf("."))).toInt();
+    commandData = (com.substring(com.indexOf(",") + 1, com.indexOf("!"))).toInt();
     cBuf.commandStack[cBuf.openSpot][0] = commandType;
     cBuf.commandStack[cBuf.openSpot][1] = commandData;
-    if (com.indexOf(".") == com.length() - 1) {
+    if (com.indexOf("!") == com.length() - 1) {
       loop = false;
       Serial.println("Finished Adding Commands");
     } else {
-      com = com.substring(com.indexOf(".") + 1);
+      com = com.substring(com.indexOf("!") + 1);
     }
     cBuf.openSpot++;
   }
@@ -94,7 +211,7 @@ void buildBuffer(String com)
 
 boolean isInputValid(String input) {
   //Check if incoming command is valid
-  int lastPunc = 0; //1 if ",", 2 if ".", 0 Otherwise
+  int lastPunc = 0; //1 if ",", 2 if "!", 0 Otherwise
   bool valid = true;
   int q = 0;
   int l = input.length();
@@ -120,7 +237,7 @@ boolean isInputValid(String input) {
           valid = false;
           break;
         }
-      } else if (currentChar == ('.')) {
+      } else if (currentChar == ('!')) {
         //Serial.println("Period Found");
         if (lastPunc == 1) {
           //Serial.println("Period ok");
@@ -147,7 +264,7 @@ boolean isInputValid(String input) {
 
     //Detect no ending period
     if (q == input.length() - 1) {
-      if (input[q] != '.') {
+      if (input[q] != '!') {
         //Serial.println("No Ending");
         valid = false;
         break;
@@ -162,23 +279,45 @@ boolean isInputValid(String input) {
   return valid;
 }
 
-void popCommand() {
+void loopPopCommand() {
   //Process an Incoming Command
-  Serial.println ("Executing Command:");
-  if (cBuf.openSpot > 0) {
-    int currentCommand[2] = {cBuf.commandStack[cBuf.openSpot - 1][0],
-                             cBuf.commandStack[cBuf.openSpot - 1][1]
-                            };
-    Serial.print(currentCommand[0]);
-    Serial.print(":");
-    Serial.println(currentCommand[1]);
-    cBuf.commandStack[cBuf.openSpot - 1][0] = -1;
-    cBuf.commandStack[cBuf.openSpot - 1][1] = -1;
-    cBuf.openSpot --;
+  while (cBuf.openSpot > 0) { //Manual Timeout
+    Serial.println ("Executing Command:");
+    if (cBuf.openSpot > 0) {
+      int currentCommand[2] = {cBuf.commandStack[cBuf.openSpot - 1][0],
+                               cBuf.commandStack[cBuf.openSpot - 1][1]
+                              };
+      Serial.print(currentCommand[0]);
+      Serial.print(":");
+      Serial.println(currentCommand[1]);
+      cBuf.commandStack[cBuf.openSpot - 1][0] = -1;
+      cBuf.commandStack[cBuf.openSpot - 1][1] = -1;
+      cBuf.openSpot--;
 
-
-  } else {
-    Serial.println("No Command");
+      //Switch Case on Command[0]
+      switch (currentCommand[0]) {
+        case (11):
+          StatusHolder.gyro[0] = currentCommand[1];
+          break;
+        case (12):
+          StatusHolder.gyro[1] = currentCommand[1];
+          break;
+        case (13):
+          StatusHolder.gyro[2] = currentCommand[1];
+          break;
+        case (21):
+          StatusHolder.mag[0] = currentCommand[1];
+          break;
+        case (22):
+          StatusHolder.mag[1] = currentCommand[1];
+          break;
+        case (23):
+          StatusHolder.mag[2] = currentCommand[1];
+          break;
+      }
+    } else {
+      Serial.println("No Command");
+    }
   }
 }
 
@@ -188,48 +327,11 @@ void popCommand() {
 ////////////////////////////////
 ////////////////////////////////
 
-//Slave Pinouts
-const int MasterReset = A4;
-const int CamRx = 0; //Camera Serial into SCom
-const int CamTx = 1; //Camera Serial out of SCom
-const int SDApin = 20; //I2C Data
-const int SCLpin = 21; //I2C Clock
-const int TempS = A0;  //Analog Temp Sensor
-const int LightS = A1; //Analog Light Sensor
-
-const int CX1 = 22; //Coil X Input 1
-const int CX2 = 23; //Coil X Input 2
-const int CY1 = 5; //Coil Y Input 1
-const int CY2 = 6; //Coil Y Input 2
-const int CZ1 = 9; //Coil Z Input 1
-const int CZ2 = 10; //Coil Z Input 2
-
-const int CX_PWM = 11; //Coil X PWM Control
-const int CY_PWM = 12; //Coil Y PWM Control
-const int CZ_PWM = 13; //Coil Z PWM Control
-const int CXY_Enable = A5; //Coil X and Y Enable
-const int CZ_Enable = 24; //Coil Z Enable
-
-
-
-
-int getTempDegrees(int TempPin) {
-  // Returns the temperature of the sensor at pin senseTemp
-  int temp = analogRead(TempPin);
-  temp = map(temp, 0, 543, -50, 125);
-  return temp;
-}
-int getLightLvl(int LightPin) {
-  //Returns the lighting of the sensor at pin senselight (10k resistor)
-  int light = analogRead(LightPin);
-  light = map(light, 0, 775, 100, 0);
-  //2.5 / 3.3 *1023
-  return light;
-}
 
 // function that executes whenever data is received from master
 // this function is registered as an event, see setup()
-void commandParser(int howMany) {
+void commandParser(int nBytes) {
+  //Need nBytes?
   String command = "";
   while (1 <= Wire.available()) { // loop through all but the last
     char c = Wire.read(); // receive byte as a character
@@ -240,24 +342,18 @@ void commandParser(int howMany) {
     Serial.println("Command is Valid");
     buildBuffer(command);
     Serial.println("Built Command Buffer Successfully");
+
+    //popCommand
+
   } else {
     Serial.println("Invalid Command");
   }
 }
 
-String buildStatusString() {
-  String res = "";
-  res += "{MRsts: " + String(resets);
-  res += ",ErrX: " + String(MagVectorError.x);
-  res += ",ErrY: " + String(MagVectorError.y);
-  res += ",Errz: " + String(MagVectorError.z);
-  res += "}||||";
-  return res;
-}
 
 void requestEvent() {
   Serial.println("Data Request");
-  String r = buildStatusString();
+  String r = StatusHolder.toString();
   char response[r.length()];
   r.toCharArray(response, r.length());
   Wire.write(response);
@@ -290,25 +386,25 @@ void initalizePinOut() {
 }
 
 
-void forcedStall(){
-  digitalWrite(8,HIGH);
+void forcedStall() {
+  digitalWrite(8, HIGH);
   int test[5] = {4};
   int x = test[78];
   Serial.println(x);
   Serial.println("Didnt crash1");
-  int y = 12.0/0.0;
+  int y = 12.0 / 0.0;
   Serial.println(y);
   Serial.println("Didnt crash2");
   int z;
   int crash = z + 4;
   Serial.println(z);
   Serial.println("Didnt crash3");
-  
 
-  
+
+
   //while(1);
-  digitalWrite(8,LOW); 
-  
+  digitalWrite(8, LOW);
+
 }
 
 void setup() {
@@ -320,7 +416,7 @@ void setup() {
   //digitalWrite(MasterReset, HIGH); //Enable Master
   Wire.begin(8);
   // join i2c bus with address #8
-  //Wire.onReceive(commandParser);
+  Wire.onReceive(commandParser);
   Wire.onRequest(requestEvent);
 
   //int endT = millis() + manualTimeoutS;
@@ -341,12 +437,28 @@ void setup() {
   //Forced Stall
   pinMode(12, INPUT_PULLUP);
   attachInterrupt(digitalPinToInterrupt(12), forcedStall, LOW);
-  
+
 }
 
 int ledState = HIGH;
 int ledLastTime = 0;
 void loop() {
+  StatusHolder.updatePassive();
+  //StatusHolder.updateTorquers(floatTuple TorquerOutput);
+
+  //popCommand();
+
+  //Test IMU Slave Link
+
+  //Reset Master if No Communication for 5 min
+  //  if (TestReset && (millis() - lastMasterCom > MasterFaultTime)) {
+  //    digitalWrite(MasterReset, LOW);
+  //    resets++;
+  //    delay(100);
+  //    digitalWrite(MasterReset, HIGH);
+  //    lastMasterCom = millis(); //
+  //  }
+
   //Blinker for Testing
   if (millis() - ledLastTime >= 477) {
     if (ledState == LOW) {
@@ -359,23 +471,6 @@ void loop() {
     Serial.println(millis() - ledLastTime);
     ledLastTime = millis();
   }
-  //popCommand();
-
-  //Test IMU Slave Link
-  //floatTuple mag = getMagData(imu, waitTime);
-  //floatTuple gyro = getGyroData(imu, waitTime);
-  //Serial.print("Mag: "); mag.print();
-  //Serial.print("Gyro: "); gyro.print();
-
-
-  //Reset Master if No Communication for 5 min
-  //  if (TestReset && (millis() - lastMasterCom > MasterFaultTime)) {
-  //    digitalWrite(MasterReset, LOW);
-  //    resets++;
-  //    delay(100);
-  //    digitalWrite(MasterReset, HIGH);
-  //    lastMasterCom = millis(); //
-  //  }
 }
 
 

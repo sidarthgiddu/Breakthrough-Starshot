@@ -3,7 +3,6 @@
 #include <Wire.h>
 
 
-
 ////Constant Initialization
 long ledLastTime = millis();
 int cycle = 0;
@@ -18,7 +17,7 @@ bool hardwareAvTable[8] = {1}; //Hardware Avaliability Table
 bool SensorFetch = false;
 bool imuWorking = true;
 bool masterUseIMU = true;
-Adafruit_LSM9DS0 imu = Adafruit_LSM9DS0();
+///Adafruit_LSM9DS0 imu = Adafruit_LSM9DS0();
 int waitTime = 100;
 
 //Slave Communication Test
@@ -27,7 +26,7 @@ int recentSlaveCom = 0;
 bool TestSCom = true;
 int lastSComTime = 0;
 int lastSComAttempt = 0;
-int SComTime = 4000;
+int SComTime = 50;
 long SlaveResetTimeOut = 30 * 1000;
 int slaveDataSize = 100;
 
@@ -75,33 +74,6 @@ float placeHolderLightSense = 5.5;
 float placeHolderAnalogTemp = 21.0;
 int placeHoldernumPhotos = 10;
 
-class commandBuffer {
-  public:
-    int commandStack[200][2];
-    int openSpot;
-    commandBuffer() {
-      commandStack[200][2] = { -1};
-      openSpot = 0;
-    }
-    void print() {
-      int i = 0;
-      Serial.print("cBuf = [");
-      int endT = millis() + manualTimeout;
-      while (i < 200 && millis() < endT) {
-        if (commandStack[i][0] == -1 && commandStack[i][1] == -1) {
-          break;
-        }
-        Serial.print(commandStack[i][0]);
-        Serial.print(":");
-        Serial.print(commandStack[i][1]);
-        Serial.print("|");
-        i++;
-      }
-      Serial.println("]");
-    }
-};
-commandBuffer cBuf;
-
 class floatTuple
 {
   public:
@@ -121,83 +93,19 @@ class floatTuple
     }
 };
 
-class sensorDataDownlink
-{
-    //floatTuple gyro;
-    float Mag[3];
-    float Gyro[3];
-    int ImuTemp;
-    float Battery;
-    float SolarXPlus;
-    float SolarXMinus;
-    float SolarYPlus;
-    float SolarYMinus;
-    float SolarZPlus;
-    float SolarZMinus;
-    int DoorSense;
-    float LightSense;
-    float AnalogTemp;
-    int numPhotos;
-    int IMUWorking;
-    int SlaveWorking;
-    int Resets;
-
-  public:
-    sensorDataDownlink(floatTuple g, floatTuple M, int IT, float B, float SolarXP, float SolarXM,
-                       float SolarYP, float SolarYM, float SolarZP, float SolarZM, int DS, float LS,
-                       float AT, int nP, bool IMUW, bool SW, int R) {
-      Gyro[0] = g.x; Gyro[1] = g.y; Gyro[2] = g.z;
-      Mag[0] = M.x; Mag[1] = M.y; Mag[2] = M.z;
-      ImuTemp = IT;
-      Battery = B;
-      SolarXPlus = SolarXP;
-      SolarXMinus = SolarXM;
-      SolarYPlus = SolarYP;
-      SolarYMinus = SolarYM;
-      SolarZPlus = SolarZP;
-      SolarZMinus = SolarZM;
-      DoorSense = DS;
-      LightSense = LS;
-      AnalogTemp = AT;
-      numPhotos = nP;
-      IMUWorking = IMUW;
-      SlaveWorking = SW;
-      Resets = R;
-    }
-    String toString() {
-      //Produces JSON Output in ASCII  for Downlink
-      String output = "";
-      output += "{";
-      output += "GX:" + String(Gyro[0]) + ",GY:" + String(Gyro[1]) + ",GZ:" + String(Gyro[2]) + ",";
-      output += "MX:" + String(Mag[0]) + ",MY:" + String(Mag[1]) + ",MZ:" + String(Mag[2]) + ",";
-      output += "IT:" + String(ImuTemp) + ",";
-      output += "B:" + String(Battery) + ",";
-      output += "SX+:" + String(SolarXPlus) + ",SX-:" + String(SolarXMinus) +
-                ",SY+:" + String(SolarYPlus) + ",SY-:" + String(SolarYMinus) +
-                ",SZ+:" + String(SolarZPlus) + ",SZ-:" + String(SolarZMinus) + ",";
-      output += "DS:" + String(DoorSense) + ",";
-      output += "LS:" + String(AnalogTemp) + ",";
-      output += "nP:" + String(numPhotos) + ",";
-      output += "IW:" + String(IMUWorking) + ",";
-      output += "SW:" + String(SlaveWorking) + ",";
-      output += "Rs:" + String(Resets) + "}";
-      return output;
-    }
-};
-
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 //IMU Code
 
-void configureSensor()
-{
-  //set magnetometer range to +-2 gauss
-  imu.setupMag(imu.LSM9DS0_MAGGAIN_2GAUSS);
-  //set gyro range to +-245 degrees per second
-  imu.setupGyro(imu.LSM9DS0_GYROSCALE_245DPS);
-}
+//void configureSensor()
+//{
+//  //set magnetometer range to +-2 gauss
+//  masterStatusHolder.imu.setupMag(imu.LSM9DS0_MAGGAIN_2GAUSS);
+//  //set gyro range to +-245 degrees per second
+//  masterStatusHolder.imu.setupGyro(imu.LSM9DS0_GYROSCALE_245DPS);
+//}
 
 floatTuple getMagData(Adafruit_LSM9DS0 imu, int wT)
 {
@@ -252,10 +160,139 @@ int getImuTempData(Adafruit_LSM9DS0 imu, int wT)
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+
+class commandBuffer {
+  public:
+    int commandStack[200][2];
+    int openSpot;
+    commandBuffer() {
+      commandStack[200][2] = { -1};
+      openSpot = 0;
+    }
+    void print() {
+      int i = 0;
+      Serial.print("cBuf = [");
+      int endT = millis() + manualTimeout;
+      while (i < 200 && millis() < endT) {
+        if (commandStack[i][0] == -1 && commandStack[i][1] == -1) {
+          break;
+        }
+        Serial.print(commandStack[i][0]);
+        Serial.print(":");
+        Serial.print(commandStack[i][1]);
+        Serial.print("|");
+        i++;
+      }
+      Serial.println("]");
+    }
+};
+commandBuffer cBuf;
+
+class masterStatus
+{
+  public:
+    Adafruit_LSM9DS0 imu;
+
+    float Mag[3];
+    float Gyro[3];
+    int ImuTemp;
+    float Battery;
+    float SolarXPlus;
+    float SolarXMinus;
+    float SolarYPlus;
+    float SolarYMinus;
+    float SolarZPlus;
+    float SolarZMinus;
+    int DoorSense;
+    float LightSense;
+    float AnalogTemp;
+    int numPhotos;
+    int IMUWorking;
+    int SlaveWorking;
+    int Resets;
+
+
+    masterStatus(floatTuple g = floatTuple(0, 0, 0) , floatTuple M = floatTuple(0, 0, 0), int IT = 0,
+                 float B = 0, float SolarXP = 0, float SolarXM = 0, float SolarYP = 0, float SolarYM = 0,
+                 float SolarZP = 0, float SolarZM = 0, int DS = 0, float LS = 0,
+                 float AT = 0, int nP = 0, bool IMUW = true, bool SW = true, int R = 0) {
+
+      imu = Adafruit_LSM9DS0();
+      Gyro[0] = g.x; Gyro[1] = g.y; Gyro[2] = g.z;
+      Mag[0] = M.x; Mag[1] = M.y; Mag[2] = M.z;
+      ImuTemp = IT;
+      Battery = B;
+      SolarXPlus = SolarXP;
+      SolarXMinus = SolarXM;
+      SolarYPlus = SolarYP;
+      SolarYMinus = SolarYM;
+      SolarZPlus = SolarZP;
+      SolarZMinus = SolarZM;
+      DoorSense = DS;
+      LightSense = LS;
+      AnalogTemp = AT;
+      numPhotos = nP;
+      IMUWorking = IMUW;
+      SlaveWorking = SW;
+      Resets = R;
+    }
+    void updateSensors(int wT) {
+      if (imuWorking) {
+        floatTuple M = getMagData(imu, wT);
+        floatTuple g = getGyroData(imu, wT);
+        Gyro[0] = g.x; Gyro[1] = g.y; Gyro[2] = g.z;
+        Mag[0] = M.x; Mag[1] = M.y; Mag[2] = M.z;
+      }
+      SolarXPlus = getCurrentAmp(1); //X+
+      SolarXMinus = getCurrentAmp(2); //X-
+      SolarYPlus = getCurrentAmp(3); //Y+
+      SolarYMinus = getCurrentAmp(4); //Y-
+      SolarZPlus = getCurrentAmp(5); //Z+
+      SolarZMinus = getCurrentAmp(6); //Z-
+
+      //Request Light/Temp Data From Slave
+
+    }
+    void configureSensor()
+    {
+      //set magnetometer range to +-2 gauss
+      imu.setupMag(imu.LSM9DS0_MAGGAIN_2GAUSS);
+      //set gyro range to +-245 degrees per second
+      imu.setupGyro(imu.LSM9DS0_GYROSCALE_245DPS);
+    }
+    String toString() {
+      //Produces JSON Output in ASCII  for Downlink
+      String output = "";
+      output += "{";
+      output += "GX:" + String(Gyro[0]) + ",GY:" + String(Gyro[1]) + ",GZ:" + String(Gyro[2]) + ",";
+      output += "MX:" + String(Mag[0]) + ",MY:" + String(Mag[1]) + ",MZ:" + String(Mag[2]) + ",";
+      output += "IT:" + String(ImuTemp) + ",";
+      output += "B:" + String(Battery) + ",";
+      output += "SX+:" + String(SolarXPlus) + ",SX-:" + String(SolarXMinus) +
+                ",SY+:" + String(SolarYPlus) + ",SY-:" + String(SolarYMinus) +
+                ",SZ+:" + String(SolarZPlus) + ",SZ-:" + String(SolarZMinus) + ",";
+      output += "DS:" + String(DoorSense) + ",";
+      output += "LS:" + String(AnalogTemp) + ",";
+      output += "nP:" + String(numPhotos) + ",";
+      output += "IW:" + String(IMUWorking) + ",";
+      output += "SW:" + String(SlaveWorking) + ",";
+      output += "Rs:" + String(Resets) + "}";
+      return output;
+    }
+};
+masterStatus masterStatusHolder = masterStatus();
+
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 //Helper Functions
 
 void initalizePinOut() {
-  const int DoorSens = 13; pinMode(DoorSens, INPUT);
+  ///const int DoorSens = 13; pinMode(DoorSens, INPUT); //WRONG
+  pinMode(13, OUTPUT); //Red LED
+
   const int DoorTrig = 5; pinMode(DoorTrig, OUTPUT);
   const int Battery = A0; pinMode(Battery, INPUT);
   const int RBRx = 0; //RockBlock Serial Into FCom
@@ -276,7 +313,7 @@ void initalizePinOut() {
   const int DoorMagEnable = 11; pinMode(DoorMagEnable, OUTPUT); //Allow Door Magnetorquer to work
 }
 
-float getCurrentAmp(int panel) { 
+float getCurrentAmp(int panel) {
   //Returns Amperage of current sensors at senseCurrent 4v/amp (40k resistor)
   float current;
   switch (panel) {
@@ -343,14 +380,14 @@ void buildBuffer(String com)
   bool loop = true;
   while (loop) {
     commandType = (com.substring(0, com.indexOf(","))).toInt();
-    commandData = (com.substring(com.indexOf(",") + 1, com.indexOf("."))).toInt();
+    commandData = (com.substring(com.indexOf(",") + 1, com.indexOf("!"))).toInt();
     cBuf.commandStack[cBuf.openSpot][0] = commandType;
     cBuf.commandStack[cBuf.openSpot][1] = commandData;
-    if (com.indexOf(".") == com.length() - 1) {
+    if (com.indexOf("!") == com.length() - 1) {
       loop = false;
       Serial.println("Finished Adding Commands");
     } else {
-      com = com.substring(com.indexOf(".") + 1);
+      com = com.substring(com.indexOf("!") + 1);
     }
     cBuf.openSpot++;
   }
@@ -358,7 +395,7 @@ void buildBuffer(String com)
 
 boolean isInputValid(String input) {
   //Check if incoming command is valid
-  int lastPunc = 0; //1 if ",", 2 if ".", 0 Otherwise
+  int lastPunc = 0; //1 if ",", 2 if "!", 0 Otherwise
   bool valid = true;
   int q = 0;
   int l = input.length();
@@ -384,13 +421,13 @@ boolean isInputValid(String input) {
           valid = false;
           break;
         }
-      } else if (currentChar == ('.')) {
-        //Serial.println("Period Found");
+      } else if (currentChar == ('!')) {
+        //Serial.println("Excl Found");
         if (lastPunc == 1) {
           //Serial.println("Period ok");
           lastPunc = 2;
         } else {
-          //Serial.println("2 Periods or No prior comma");
+          //Serial.println("2 Excl or No prior comma");
           valid = false;
           break;
         }
@@ -411,7 +448,7 @@ boolean isInputValid(String input) {
 
     //Detect no ending period
     if (q == input.length() - 1) {
-      if (input[q] != '.') {
+      if (input[q] != '!') {
         //Serial.println("No Ending");
         valid = false;
         break;
@@ -497,46 +534,61 @@ String requestFromSlave() {
   return res;
 }
 
+String buildIMUDataCommand() {
+  // ex. gyro data: "11,3.653!12,2.553!13,-10!"
+  String res = "";
+  res += "11," + String(masterStatusHolder.Gyro[0]) + "!";
+  res += "12," + String(masterStatusHolder.Gyro[1]) + "!";
+  res += "13," + String(masterStatusHolder.Gyro[2]) + "!";
+  res += "21," + String(masterStatusHolder.Mag[0]) + "!";
+  res += "22," + String(masterStatusHolder.Mag[1]) + "!";
+  res += "23," + String(masterStatusHolder.Mag[2]) + "!";
+  return res;
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /*  Watchdog timer support for Arduino Zero
- *  by Richard Hole  December 19, 2015
- */
+    by Richard Hole  December 19, 2015
+*/
 
-//static void   WDTsync() {
-//  while (WDT->STATUS.bit.SYNCBUSY == 1); //Just wait till WDT is free
-//}
-//
-////============= resetWDT ===================================================== resetWDT ============
-//void resetWDT() {
-//  // reset the WDT watchdog timer.
-//  // this must be called before the WDT resets the system
-//  WDT->CLEAR.reg= 0xA5; // reset the WDT
-//  WDTsync(); 
-//}
-//
-////============= systemReset ================================================== systemReset ============
-//void systemReset() {
-//  // use the WDT watchdog timer to force a system reset.
-//  // WDT MUST be running for this to work
-//  WDT->CLEAR.reg= 0x00; // system reset via WDT
-//  WDTsync(); 
-//}
-//
-////============= setupWDT ===================================================== setupWDT ============
-//void setupWDT( uint8_t period) {
-//  // initialize the WDT watchdog timer
-//
-//  WDT->CTRL.reg = 0; // disable watchdog
-//  WDTsync(); // sync is required
-//
-//  WDT->CONFIG.reg = min(period,11); // see Table 17-5 Timeout Period (valid values 0-11)
-//
-//  WDT->CTRL.reg = WDT_CTRL_ENABLE; //enable watchdog
-//  WDTsync(); 
-//}
+//setupWDT( 11 );
+
+
+static void   WDTsync() {
+  while (WDT->STATUS.bit.SYNCBUSY == 1); //Just wait till WDT is free
+}
+
+//============= resetWDT ===================================================== resetWDT ============
+void resetWDT() {
+  // reset the WDT watchdog timer.
+  // this must be called before the WDT resets the system
+  WDT->CLEAR.reg = 0xA5; // reset the WDT
+  WDTsync();
+}
+
+//============= systemReset ================================================== systemReset ============
+void systemReset() {
+  // use the WDT watchdog timer to force a system reset.
+  // WDT MUST be running for this to work
+  WDT->CLEAR.reg = 0x00; // system reset via WDT
+  WDTsync();
+}
+
+//============= setupWDT ===================================================== setupWDT ============
+void setupWDT( uint8_t period) {
+  // initialize the WDT watchdog timer
+
+  WDT->CTRL.reg = 0; // disable watchdog
+  WDTsync(); // sync is required
+
+  WDT->CONFIG.reg = min(period, 11); // see Table 17-5 Timeout Period (valid values 0-11)
+
+  WDT->CTRL.reg = WDT_CTRL_ENABLE; //enable watchdog
+  WDTsync();
+}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -562,14 +614,14 @@ void setup()
   //Try to initialize and warn if we couldn't detect the chip
   int endT = millis() + manualTimeout;
 
-  while (!imu.begin() && millis() < endT) {
+  while (!masterStatusHolder.imu.begin() && millis() < endT) {
     Serial.println("IMU Not working");
   }
 
 
   cBuf = commandBuffer();
 
-  configureSensor(); //runs configureSensor function
+  masterStatusHolder.configureSensor(); //runs configureSensor function
   //pinMode(A3, INPUT); //Temperature Sensor
   Wire.begin(); //Start i2c as master
 
@@ -581,23 +633,10 @@ void setup()
 void loop() {
   //Initalize Per-Loop Variables
   String SlaveResponse = "";
-  floatTuple mag = floatTuple(0, 0, 0);
-  floatTuple gyro = floatTuple(0, 0, 0);
-  float currents[6] = {999};
 
   //Collect Sensor Data
   if (SensorFetch) {
-    if (imuWorking) {
-      mag = getMagData(imu, waitTime);
-      gyro = getGyroData(imu, waitTime);
-    }
-    currents[0] = getCurrentAmp(1); //X+
-    currents[1] = getCurrentAmp(2); //X-
-    currents[2] = getCurrentAmp(3); //Y+
-    currents[3] = getCurrentAmp(4); //Y-
-    currents[4] = getCurrentAmp(5); //Z+
-    currents[5] = getCurrentAmp(6); //Z-
-
+    masterStatusHolder.updateSensors(waitTime);
     //Request Light/Temp Data From Slave
   }
 
@@ -621,36 +660,26 @@ void loop() {
 
   //Testing IMU and Sensor Downlink String Generator
   if (millis() - lastDLTime >= DLTime || commandedDL) {
-    floatTuple mag = floatTuple(0, 0, 0);
-    floatTuple gyro = floatTuple(0, 0, 0);
-    if (imuWorking) {
-      mag = getMagData(imu, waitTime);
-      gyro = getGyroData(imu, waitTime);
-    }
-    int temp1 = 99;//getImuTempData(imu, waitTime);
-
-    sensorDataDownlink DL = sensorDataDownlink(gyro, mag, temp1, placeHolderBattery,
-                            placeHolderSolarXPlus, placeHolderSolarXMinus,
-                            placeHolderSolarYPlus, placeHolderSolarYMinus,
-                            placeHolderSolarZPlus, placeHolderSolarZMinus,
-                            placeHolderDoorSense, placeHolderLightSense,
-                            placeHolderAnalogTemp, placeHoldernumPhotos,
-                            imuWorking, slaveWorking, SlaveResets);
     //Send Data to RockBlock via Serial
     Serial.println("Downlink String: ");
-    String DLS = DL.toString();
+    String DLS = masterStatusHolder.toString();
     Serial.println(DLS);
     Serial.println(DLS.length());
     lastDLTime = millis();
   }
-  //
-  //  //Test Slave Communication
-  //  //char SCommand[] = "1,1.";
+
+  
+  //Test Slave Communication
   if (TestSCom) {
     if (millis() - lastSComAttempt >= SComTime || commandedSC) {
       lastSComAttempt = millis();
-      Serial.print("Slave Status Report: ");
-      //sendSCommand(SCommand);
+      Serial.print("Slave Status Report: "); //Stalls here?
+      String SCommand = buildIMUDataCommand();
+      int l = SCommand.length();
+      char * SComCharA[l];
+      SCommand.toCharArray(SComCharA,l);
+      
+      sendSCommand(SComCharA);
       SlaveResponse = requestFromSlave();
       Serial.println(SlaveResponse);
 
