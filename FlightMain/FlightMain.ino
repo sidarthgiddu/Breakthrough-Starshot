@@ -668,17 +668,16 @@ void loop() {
     lastDLTime = millis();
   }
 
-  
   //Test Slave Communication
   if (TestSCom) {
     if (millis() - lastSComAttempt >= SComTime || commandedSC) {
       lastSComAttempt = millis();
       Serial.print("Slave Status Report: "); //Stalls here?
+      
       String SCommand = buildIMUDataCommand();
       int l = SCommand.length();
-      char * SComCharA[l];
+      char SComCharA[l];
       SCommand.toCharArray(SComCharA,l);
-      
       sendSCommand(SComCharA);
       SlaveResponse = requestFromSlave();
       Serial.println(SlaveResponse);
