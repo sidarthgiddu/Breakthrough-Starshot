@@ -186,7 +186,7 @@ float Inertia[3][3] = {{mass / 6, 0, 0},
 }; // Inertia initialization
 float E = 0.0001;
 
-void runADCS(float* Bvalues, float* gyroData, float Kp, float Kd) {
+float * runADCS(float* Bvalues, float* gyroData, float Kp, float Kd) {
   float J[9] = {0, Bvalues[2], -Bvalues[1], -Bvalues[2], 0, Bvalues[0], Bvalues[1], -Bvalues[0], 0};
 
   Matrix.Copy((float*)Bvalues, 1, 3, (float*)Bfield); // create new field to scale for the pseudo-inverse
@@ -231,11 +231,11 @@ void runADCS(float* Bvalues, float* gyroData, float Kp, float Kd) {
   Matrix.Scale((float*) ErrorSum, 3, 1, -1.0); // prep error for multiplication with the Jpinv matrix
   Matrix.Multiply((float*) Jpinv, (float*) ErrorSum, 3, 3, 1, (float*) current);
 
-  outputPWM((float*) current, 3);
+  return outputPWM((float*) current, 3);
 
 }
 
-void outputPWM(float* I, int length) {
+float * outputPWM(float* I, int length) {
   float Imax = 2.0;
 
   for (int i = 0; i < length; i++) {
@@ -245,9 +245,13 @@ void outputPWM(float* I, int length) {
   }
 
   // CREATE PWM OUT SIGNAL
-  analogWrite(CX_PWM, I[1] / Imax * 255);
-  analogWrite(CY_PWM, I[2] / Imax * 255);
-  analogWrite(CZ_PWM, I[3] / Imax * 255);
+  float PWM[3] = {I[1] / Imax * 255,I[2] / Imax * 255,I[3] / Imax * 255};
+  
+  analogWrite(CX_PWM, PWM[0]);
+  analogWrite(CY_PWM, PWM[1]);
+  analogWrite(CZ_PWM, PWM[2]);
+
+  return PWM;
 }
 
 static inline int8_t sgn(float val) {
