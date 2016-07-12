@@ -1,7 +1,5 @@
 #include <Wire.h>
-#include <Adafruit_LSM9DS0.h>
-#include <Adafruit_Sensor.h>
-//#include <MatrixMath.h>
+#include <MatrixMath.h>
 
 ////Constant Initialization
 bool TestReset = false;
@@ -179,8 +177,89 @@ commandBuffer cBuf;
 ////////////////////////////////
 ////////////////////////////////
 
-//IMU Functionc
-// Currently Invalid (I2C Conflict)
+float mass = 1.33;
+float Bfield[3];
+float w[3];
+float Inertia[3][3] = {{mass / 6, 0, 0},
+  {0, mass / 6, 0},
+  {0, 0, mass / 6}
+}; // Inertia initialization
+float E = 0.0001;
+
+void runADCS(float* Bvalues, float* gyroData, float Kp, float Kd) {
+  float J[9] = {0, Bvalues[2], -Bvalues[1], -Bvalues[2], 0, Bvalues[0], Bvalues[1], -Bvalues[0], 0};
+
+  Matrix.Copy((float*)Bvalues, 1, 3, (float*)Bfield); // create new field to scale for the pseudo-inverse
+  Matrix.Scale((float*)Bfield, 3, 1, E); // scale duplicated Bfield array with E for pseudo-inverse
+
+  float Jnew[4][3] = {{J[0], J[1], J[2]},
+    {J[3], J[4], J[5]},
+    {J[6], J[7], J[8]},
+    {Bfield[0], Bfield[1], Bfield[2]}
+  };
+
+  float Jtranspose[3][4];
+  float Jproduct[3][3];
+  float Jppinv[3][4];
+
+  Matrix.Transpose((float*)Jnew, 4, 3, (float*)Jtranspose); // transpose(Jnew)
+
+  Matrix.Multiply((float*)Jtranspose, (float*)Jnew, 3, 4, 3, (float*)Jproduct); //transpose(Jnew)*Jnew=Anew
+
+  Matrix.Invert((float*)Jproduct, 3); // inverse(transpose(Jnew)*Jnew)=Bnew
+
+  Matrix.Multiply((float*)Jproduct, (float*)Jtranspose, 3, 3, 4, (float*)Jppinv); // Bnew*transpose(Jnew)=Cnew
+
+  float Jpinv[3][3] = {{Jppinv[0][0], Jppinv[0][1], Jppinv[0][2]},
+    {Jppinv[1][0], Jppinv[1][1], Jppinv[1][2]},
+    {Jppinv[2][0], Jppinv[2][1], Jppinv[2][2]}
+  };
+
+  float current[3][1];
+  float OmegaError[3][1], BfieldError[3][1], ErrorSum[3][1];
+  float Omegacmd[3][1] = {0, 0, 1};
+  float Bcmd[3][1] = {0, 0, 1};
+  float A = 0.532;
+
+  Matrix.Subtract((float*) Bvalues, (float*) Bcmd, 3, 1, (float*) BfieldError);
+  Matrix.Subtract((float*) gyroData, (float*) Omegacmd, 3, 1, (float*) OmegaError);
+
+  Matrix.Scale((float*)BfieldError, 3, 1, Kp / A); // scale error with proportional gain (updates array)
+  Matrix.Scale((float*)OmegaError, 3, 1, Kd / A); // scale error with derivative gain (updates array)
+
+  Matrix.Add((float*)BfieldError, (float*)OmegaError, 3, 1, (float*) ErrorSum);
+  Matrix.Scale((float*) ErrorSum, 3, 1, -1.0); // prep error for multiplication with the Jpinv matrix
+  Matrix.Multiply((float*) Jpinv, (float*) ErrorSum, 3, 3, 1, (float*) current);
+
+  outputPWM((float*) current, 3);
+
+}
+
+void outputPWM(float* I, int length) {
+  float Imax = 2.0;
+
+  for (int i = 0; i < length; i++) {
+    if (abs(I[i]) > Imax) {
+      I[i] = Imax * sgn(I[i]);
+    }
+  }
+
+  // CREATE PWM OUT SIGNAL
+  analogWrite(CX_PWM, I[1] / Imax * 255);
+  analogWrite(CY_PWM, I[2] / Imax * 255);
+  analogWrite(CZ_PWM, I[3] / Imax * 255);
+}
+
+static inline int8_t sgn(float val) {
+  if (val < 0.0) return -1;
+  if (val == 0.0) return 0;
+  return 1;
+}
+
+float gData[3] = {0.2, 0.04, -0.1};
+float mData[3] = {0.00002, 0.0004, -0.0009};
+float Kp = 1e-5;
+float Kd = 1e-6;
 
 ////////////////////////////////
 ////////////////////////////////
@@ -448,7 +527,8 @@ void loop() {
 
   //popCommand();
 
-  //Test IMU Slave Link
+  //Test ADCS
+  runADCS(mData, gData, Kp, Kd); //placeholders
 
   //Reset Master if No Communication for 5 min
   //  if (TestReset && (millis() - lastMasterCom > MasterFaultTime)) {
@@ -471,17 +551,7 @@ void loop() {
     Serial.println(millis() - ledLastTime);
     ledLastTime = millis();
   }
-//  if (millis() - ledLastTime >= 577) {
-//    if (ledState == LOW) {
-//      ledState = HIGH;
-//    } else {
-//      ledState = LOW;
-//    }
-//    digitalWrite(13, ledState);
-//    Serial.print("S Running: ");
-//    Serial.println(millis() - ledLastTime);
-//    ledLastTime = millis();
-//  }
+
 }
 
 
