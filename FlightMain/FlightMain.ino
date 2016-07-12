@@ -1,6 +1,7 @@
 #include <Adafruit_LSM9DS0.h>
 #include <Adafruit_Sensor.h>
 #include <Wire.h>
+#include <IridiumSBD.h> //IT WORKS?!?!?!
 
 
 ////Constant Initialization
@@ -24,15 +25,20 @@ int waitTime = 100;
 bool slaveWorking = true;
 int recentSlaveCom = 0;
 bool TestSCom = true;
-int lastSComTime = 0;
-int lastSComAttempt = 0;
+long lastSComTime = 0;
+long lastSComAttempt = 0;
 int SComTime = 50;
 long SlaveResetTimeOut = 30 * 1000;
 int slaveDataSize = 100;
 
 //Serial Command Test
 int popTime = 4000;
-int lastPopTime = 0;
+long lastPopTime = 0;
+
+//RockBlock Test
+IridiumSBD iSBD = IridiumSBD(Serial, 22); //RBSleep Pin
+long SBDCallBackStartTime = 0;
+long RBForcedTimeout = 30*1000;
 
 //Commanded Action Flags
 bool commandedSC = false;
@@ -60,8 +66,8 @@ const int SlaveReset = 10; //Slave Fault Handing (via Hard Reset)
 const int DoorMagEnable = 11; //Allow Door Magnetorquer to work
 
 //Downlink Test Placeholders
-int DLTime = 6000;
-int lastDLTime = 0;
+long DLTime = 6000;
+long lastDLTime = 0;
 float placeHolderBattery = 0.3;
 float placeHolderSolarXPlus = .1;
 float placeHolderSolarXMinus = .2;
@@ -550,6 +556,29 @@ String buildIMUDataCommand() {
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+// RockBlock Uplink/Downlink Functions
+//      Most stored in IridiumSBD Library
+
+bool ISBDCallback()
+{
+  unsigned ledOn = (bool)((millis() / 200) % 2);
+  digitalWrite(13, ledOn); // Blink LED every 1/5 second
+  //Wire.println("31.200!"); //Test Data by relaying Through Slave
+
+  if (SBDCallBackStartTime + RBForcedTimeout > millis()) {
+    return false;
+  } else {
+    return true;
+  }
+}
+
+
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
 /*  Watchdog timer support for Arduino Zero
     by Richard Hole  December 19, 2015
 */
@@ -663,6 +692,8 @@ void loop() {
     //Send Data to RockBlock via Serial
     Serial.println("Downlink String: ");
     String DLS = masterStatusHolder.toString();
+
+    
     Serial.println(DLS);
     Serial.println(DLS.length());
     lastDLTime = millis();
@@ -673,11 +704,11 @@ void loop() {
     if (millis() - lastSComAttempt >= SComTime || commandedSC) {
       lastSComAttempt = millis();
       Serial.print("Slave Status Report: "); //Stalls here?
-      
+
       String SCommand = buildIMUDataCommand();
       int l = SCommand.length();
       char SComCharA[l];
-      SCommand.toCharArray(SComCharA,l);
+      SCommand.toCharArray(SComCharA, l);
       sendSCommand(SComCharA);
       SlaveResponse = requestFromSlave();
       Serial.println(SlaveResponse);
