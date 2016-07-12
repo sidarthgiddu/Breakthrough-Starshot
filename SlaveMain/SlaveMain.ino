@@ -471,6 +471,17 @@ void loop() {
     Serial.println(millis() - ledLastTime);
     ledLastTime = millis();
   }
+  if (millis() - ledLastTime >= 577) {
+    if (ledState == LOW) {
+      ledState = HIGH;
+    } else {
+      ledState = LOW;
+    }
+    digitalWrite(13, ledState);
+    Serial.print("S Running: ");
+    Serial.println(millis() - ledLastTime);
+    ledLastTime = millis();
+  }
 }
 
 
