@@ -184,7 +184,7 @@ float Inertia[3][3] = {{mass / 6, 0, 0},
   {0, mass / 6, 0},
   {0, 0, mass / 6}
 }; // Inertia initialization
-float E = 0.0001;
+float E = 1e-4;
 
 void runADCS(float* Bvalues, float* gyroData, float Kp, float Kd) {
   float J[9] = {0, Bvalues[2], -Bvalues[1], -Bvalues[2], 0, Bvalues[0], Bvalues[1], -Bvalues[0], 0};
@@ -195,7 +195,7 @@ void runADCS(float* Bvalues, float* gyroData, float Kp, float Kd) {
   float Jnew[4][3] = {{J[0], J[1], J[2]},
     {J[3], J[4], J[5]},
     {J[6], J[7], J[8]},
-    {Bfield[0], Bfield[1], Bfield[2]}
+    {Bfield[0]*E, Bfield[1]*E, Bfield[2]*E}
   };
 
   float Jtranspose[3][4];
@@ -203,11 +203,8 @@ void runADCS(float* Bvalues, float* gyroData, float Kp, float Kd) {
   float Jppinv[3][4];
 
   Matrix.Transpose((float*)Jnew, 4, 3, (float*)Jtranspose); // transpose(Jnew)
-
   Matrix.Multiply((float*)Jtranspose, (float*)Jnew, 3, 4, 3, (float*)Jproduct); //transpose(Jnew)*Jnew=Anew
-
   Matrix.Invert((float*)Jproduct, 3); // inverse(transpose(Jnew)*Jnew)=Bnew
-
   Matrix.Multiply((float*)Jproduct, (float*)Jtranspose, 3, 3, 4, (float*)Jppinv); // Bnew*transpose(Jnew)=Cnew
 
   float Jpinv[3][3] = {{Jppinv[0][0], Jppinv[0][1], Jppinv[0][2]},
@@ -231,6 +228,8 @@ void runADCS(float* Bvalues, float* gyroData, float Kp, float Kd) {
   Matrix.Scale((float*) ErrorSum, 3, 1, -1.0); // prep error for multiplication with the Jpinv matrix
   Matrix.Multiply((float*) Jpinv, (float*) ErrorSum, 3, 3, 1, (float*) current);
 
+  Matrix.Print((float*) Jproduct, 3, 3, "check");
+
   outputPWM((float*) current, 3);
 
 }
@@ -245,21 +244,26 @@ void outputPWM(float* I, int length) {
   }
 
   // CREATE PWM OUT SIGNAL
-  analogWrite(CX_PWM, I[1] / Imax * 255);
-  analogWrite(CY_PWM, I[2] / Imax * 255);
-  analogWrite(CZ_PWM, I[3] / Imax * 255);
+  //analogWrite(CX_PWM, I[1] / Imax * 255);
+  //analogWrite(CY_PWM, I[2] / Imax * 255);
+  //analogWrite(CZ_PWM, I[3] / Imax * 255);
+
+  floatTuple PWMvaluesForTorquers = floatTuple(I[1] / Imax * 255, I[2] / Imax * 255, I[3] / Imax * 255);
+  floatTuple PWMdirectionsForTorquers = floatTuple(sgn(I[0]), sgn(I[1]), sgn(I[2]));
+  StatusHolder.updateTorquers(PWMdirectionsForTorquers, PWMvaluesForTorquers);
+
 }
 
-static inline int8_t sgn(float val) {
-  if (val < 0.0) return -1;
-  if (val == 0.0) return 0;
-  return 1;
+static inline float sgn(float val) {
+  if (val < 0.0) return -1.0;
+  if (val == 0.0) return 0.0;
+  return 1.0;
 }
-
+// Placeholder Test Data
 float gData[3] = {0.2, 0.04, -0.1};
-float mData[3] = {0.00002, 0.0004, -0.0009};
-float Kp = 1e-5;
-float Kd = 1e-6;
+float mData[3] = {0.00002*1000, 0.0004*1000, -0.0009*1000};
+float Kp = 1e-3;
+float Kd = 1e-3;
 
 ////////////////////////////////
 ////////////////////////////////
@@ -520,7 +524,8 @@ void setup() {
 }
 
 int ledState = HIGH;
-int ledLastTime = 0;
+long ledLastTime = 0;
+long lastADCSTime = 0;
 void loop() {
   StatusHolder.updatePassive();
   //StatusHolder.updateTorquers(floatTuple TorquerOutput);
@@ -528,7 +533,13 @@ void loop() {
   //popCommand();
 
   //Test ADCS
-  runADCS(mData, gData, Kp, Kd); //placeholders
+  if (millis() - lastADCSTime >= 4000) {
+    runADCS(mData, gData, Kp, Kd); //placeholders
+    Serial.print("X axis: "); Serial.print(StatusHolder.CurXDir,20); Serial.print(" "); Serial.println(StatusHolder.CurXPWM,20);
+    Serial.print("Y axis: "); Serial.print(StatusHolder.CurYDir,20); Serial.print(" "); Serial.println(StatusHolder.CurYPWM,20);
+    Serial.print("Z axis: "); Serial.print(StatusHolder.CurZDir,20); Serial.print(" "); Serial.println(StatusHolder.CurZPWM,20);
+    lastADCSTime = millis();
+  }
 
   //Reset Master if No Communication for 5 min
   //  if (TestReset && (millis() - lastMasterCom > MasterFaultTime)) {
@@ -547,8 +558,8 @@ void loop() {
       ledState = LOW;
     }
     digitalWrite(13, ledState);
-    Serial.print("S Running: ");
-    Serial.println(millis() - ledLastTime);
+    //Serial.print("S Running: ");
+    //Serial.println(millis() - ledLastTime);
     ledLastTime = millis();
   }
 
