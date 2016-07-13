@@ -3,14 +3,26 @@
 #include <Wire.h>
 #include <IridiumSBD.h> //IT WORKS?!?!?!
 
+//State Machine Definition
+#define DORMANT_CRUISE 1
+#define INITALIZATION  2
+#define INIT_SLEEP     3
+#define NORMAL_OPS     4
+#define ECLIPSE        5
+#define DEPLOY_ARMED   6
+#define DEPLOY_VERIF   7
+#define DEPLOY_DOWN_LK 8
+#define LOW_POWER      9
+#define SAFE_MODE     10
 
 ////Constant Initialization
-long ledLastTime = millis();
+unsigned long cruiseEnd = 30 * 60 * 1000;
+unsigned long ledLastTime = millis();
 int cycle = 0;
 int ledState = LOW;
-long manualTimeout = 10 * 1000;
+unsigned long manualTimeout = 10 * 1000;
 int SlaveResets = 0;
-long deployTimeOut = 30 * 1000;
+unsigned long deployTimeOut = 30 * 1000;
 bool hardwareAvTable[8] = {1}; //Hardware Avaliability Table
 //[Imu, SX+,SX-,SY+, SY-, SZ+, SZ-,Temp]
 
@@ -19,7 +31,7 @@ bool SensorFetch = false;
 bool imuWorking = true;
 bool masterUseIMU = true;
 ///Adafruit_LSM9DS0 imu = Adafruit_LSM9DS0();
-int waitTime = 100;
+int imuSensorDwell = 50;
 
 //Slave Communication Test
 bool slaveWorking = true;
@@ -38,7 +50,7 @@ long lastPopTime = 0;
 //RockBlock Test
 IridiumSBD iSBD = IridiumSBD(Serial, 22); //RBSleep Pin
 long SBDCallBackStartTime = 0;
-long RBForcedTimeout = 30*1000;
+long RBForcedTimeout = 30 * 1000;
 
 //Commanded Action Flags
 bool commandedSC = false;
@@ -199,6 +211,7 @@ class masterStatus
   public:
     Adafruit_LSM9DS0 imu;
 
+    int State;
     float Mag[3];
     float Gyro[3];
     int ImuTemp;
@@ -218,11 +231,12 @@ class masterStatus
     int Resets;
 
 
-    masterStatus(floatTuple g = floatTuple(0, 0, 0) , floatTuple M = floatTuple(0, 0, 0), int IT = 0,
+    masterStatus(int S = NORMAL_OPS, floatTuple g = floatTuple(0, 0, 0) , floatTuple M = floatTuple(0, 0, 0), int IT = 0,
                  float B = 0, float SolarXP = 0, float SolarXM = 0, float SolarYP = 0, float SolarYM = 0,
                  float SolarZP = 0, float SolarZM = 0, int DS = 0, float LS = 0,
                  float AT = 0, int nP = 0, bool IMUW = true, bool SW = true, int R = 0) {
 
+      State = S;
       imu = Adafruit_LSM9DS0();
       Gyro[0] = g.x; Gyro[1] = g.y; Gyro[2] = g.z;
       Mag[0] = M.x; Mag[1] = M.y; Mag[2] = M.z;
@@ -558,19 +572,19 @@ String buildIMUDataCommand() {
 
 // RockBlock Uplink/Downlink Functions
 //      Most stored in IridiumSBD Library
-
-bool ISBDCallback()
-{
-  unsigned ledOn = (bool)((millis() / 200) % 2);
-  digitalWrite(13, ledOn); // Blink LED every 1/5 second
-  //Wire.println("31.200!"); //Test Data by relaying Through Slave
-
-  if (SBDCallBackStartTime + RBForcedTimeout > millis()) {
-    return false;
-  } else {
-    return true;
-  }
-}
+//
+//bool ISBDCallback()
+//{
+//  unsigned ledOn = (bool)((millis() / 200) % 2);
+//  digitalWrite(13, ledOn); // Blink LED every 1/5 second
+//  //Wire.println("31.200!"); //Test Data by relaying Through Slave
+//
+//  if (SBDCallBackStartTime + RBForcedTimeout > millis()) {
+//    return false;
+//  } else {
+//    return true;
+//  }
+//}
 
 
 
@@ -660,96 +674,150 @@ void setup()
 }
 
 void loop() {
-  //Initalize Per-Loop Variables
-  String SlaveResponse = "";
 
-  //Collect Sensor Data
-  if (SensorFetch) {
-    masterStatusHolder.updateSensors(waitTime);
-    //Request Light/Temp Data From Slave
-  }
+  switch (masterStatusHolder.State) {
+    case (NORMAL_OPS):
 
-  //readSerialAdd2Buffer();
-  //if (millis() - lastPopTime >= popTime) {
-  //  popCommand();
-  //}
+      //Collect Sensor Data
+      if (SensorFetch) {
+        masterStatusHolder.updateSensors(imuSensorDwell);
+        //Request Light/Temp Data From Slave
+      }
 
-  //Blinker for Testing
-  if (millis() - ledLastTime >= 300) {
-    if (ledState == LOW) {
-      ledState = HIGH;
-    } else {
-      ledState = LOW;
-    }
-    digitalWrite(13, ledState);
-    Serial.print("Running: ");
-    Serial.println(millis() - ledLastTime);
-    ledLastTime = millis();
-  }
+      //readSerialAdd2Buffer();
+      //if (millis() - lastPopTime >= popTime) {
+      //  popCommand();
+      //}
 
-  //Testing IMU and Sensor Downlink String Generator
-  if (millis() - lastDLTime >= DLTime || commandedDL) {
-    //Send Data to RockBlock via Serial
-    Serial.println("Downlink String: ");
-    String DLS = masterStatusHolder.toString();
-
-    
-    Serial.println(DLS);
-    Serial.println(DLS.length());
-    lastDLTime = millis();
-  }
-
-  //Test Slave Communication
-  if (TestSCom) {
-    if (millis() - lastSComAttempt >= SComTime || commandedSC) {
-      lastSComAttempt = millis();
-      Serial.print("Slave Status Report: "); //Stalls here?
-
-      String SCommand = buildIMUDataCommand();
-      int l = SCommand.length();
-      char SComCharA[l];
-      SCommand.toCharArray(SComCharA, l);
-      sendSCommand(SComCharA);
-      SlaveResponse = requestFromSlave();
-      Serial.println(SlaveResponse);
-
-      if (!SlaveResponse.equals("")) {
-        lastSComTime = millis(); //Reset Timeout if Com is successful
-
-        //Valid Reply From Slave:
-        Serial.println("Valid Reply");
-      } else {
-        //No Reply From Slave
-        if (millis() - lastSComTime > SlaveResetTimeOut) {
-
-          //No Communication for (SlaveResetTimeOut) ms
-          slaveWorking = false;
-
-          if (!slaveWorking) {
-            digitalWrite(SlaveReset, LOW);
-            delay(50);
-            digitalWrite(SlaveReset, HIGH);
-            SlaveResets++;
-            //delay(3000);
-            //Wire.beginTransmission(8); // transmit to device #8
-            //Wire.write("Reset");   // sends String
-            //Wire.endTransmission();    // stop transmitting
-
-            Serial.println("Slave Reset");
-          }
+      //Blinker for Testing
+      if (millis() - ledLastTime >= 300) {
+        if (ledState == LOW) {
+          ledState = HIGH;
         } else {
-          Serial.print("No Reply From Slave for ");
-          Serial.print((millis() - lastSComTime) / 1000.0);
-          Serial.println(" seconds");
+          ledState = LOW;
+        }
+        digitalWrite(13, ledState);
+        Serial.print("Running: ");
+        Serial.println(millis() - ledLastTime);
+        ledLastTime = millis();
+      }
+
+      //Testing IMU and Sensor Downlink String Generator
+      if (millis() - lastDLTime >= DLTime || commandedDL) {
+        //Send Data to RockBlock via Serial
+        Serial.println("Downlink String: ");
+        String DLS = masterStatusHolder.toString();
+
+
+        Serial.println(DLS);
+        Serial.println(DLS.length());
+        lastDLTime = millis();
+      }
+
+      //Test Slave Communication
+      if (TestSCom) {
+        if (millis() - lastSComAttempt >= SComTime || commandedSC) {
+          lastSComAttempt = millis();
+          Serial.print("Slave Status Report: "); //Stalls here?
+
+          String SCommand = buildIMUDataCommand();
+          int l = SCommand.length();
+          char SComCharA[l];
+          SCommand.toCharArray(SComCharA, l);
+          sendSCommand(SComCharA);
+          String SlaveResponse = requestFromSlave();
+          Serial.println(SlaveResponse);
+
+          if (!SlaveResponse.equals("")) {
+            lastSComTime = millis(); //Reset Timeout if Com is successful
+
+            //Valid Reply From Slave:
+            Serial.println("Valid Reply");
+          } else {
+            //No Reply From Slave
+            if (millis() - lastSComTime > SlaveResetTimeOut) {
+
+              //No Communication for (SlaveResetTimeOut) ms
+              slaveWorking = false;
+
+              if (!slaveWorking) {
+                digitalWrite(SlaveReset, LOW);
+                delay(50);
+                digitalWrite(SlaveReset, HIGH);
+                SlaveResets++;
+                //delay(3000);
+                //Wire.beginTransmission(8); // transmit to device #8
+                //Wire.write("Reset");   // sends String
+                //Wire.endTransmission();    // stop transmitting
+
+                Serial.println("Slave Reset");
+              }
+            } else {
+              Serial.print("No Reply From Slave for ");
+              Serial.print((millis() - lastSComTime) / 1000.0);
+              Serial.println(" seconds");
+            }
+          }
         }
       }
-    }
+      break;
+
+    case (DORMANT_CRUISE):
+      //30 min Dormant Cruise
+      if (millis() > cruiseEnd) {
+        masterStatusHolder.State = INITALIZATION;
+      } else {
+        delay(10000);
+      }
+      break;
+
+    case (INITALIZATION):
+      //Initiate Detumble "41,1!"
+      //Listen to Status Reports
+      //Check battery ->> INIT_SLEEP
+      //Attempt Downlink
+      break;
+
+    case (INIT_SLEEP):
+      //Check Time
+      //Check battery ->> INITALIZATION
+      break;
+
+    case (ECLIPSE):
+      //Check Battery
+      //Check Solar Current
+      //Check Time
+      break;
+
+    case (DEPLOY_ARMED):
+      //Prep Camera
+      //Prep IMU
+      //Activate Nichrome
+      //Wait for DoorSensor
+      break;
+
+    case (DEPLOY_VERIF):
+      //LightSensor Trigger
+      //Image Capture
+      //IMU Capture
+      break;
+
+    case (DEPLOY_DOWN_LK):
+      //Upon Request Downlink Image
+      //Downlink Data
+      break;
+
+    case (LOW_POWER):
+      //Check battery
+      //Check Solar Currents
+      //Check Time
+      break;
+
+    case (SAFE_MODE):
+      //No Idea
+      break;
   }
-
-
-
   //Testing Iterators
-  recentSlaveCom--;
   cycle++;
   //Serial.print("C: ");
   //Serial.println(cycle);

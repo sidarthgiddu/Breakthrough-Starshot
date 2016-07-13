@@ -231,7 +231,6 @@ void runADCS(float* Bvalues, float* gyroData, float Kp, float Kd) {
   Matrix.Print((float*) Jproduct, 3, 3, "check");
 
   outputPWM((float*) current, 3);
-
 }
 
 void outputPWM(float* I, int length) {
@@ -251,6 +250,7 @@ void outputPWM(float* I, int length) {
   floatTuple PWMvaluesForTorquers = floatTuple(I[1] / Imax * 255, I[2] / Imax * 255, I[3] / Imax * 255);
   floatTuple PWMdirectionsForTorquers = floatTuple(sgn(I[0]), sgn(I[1]), sgn(I[2]));
   StatusHolder.updateTorquers(PWMdirectionsForTorquers, PWMvaluesForTorquers);
+
 
 }
 
