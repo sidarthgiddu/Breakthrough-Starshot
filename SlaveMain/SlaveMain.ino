@@ -244,9 +244,9 @@ void outputPWM(BigNumber* I, int length) {
   String I2=I[1].toString();
   String I3=I[2].toString();
   float If[3]={I1.toFloat(),I2.toFloat(),I3.toFloat()};
-  free(I1);
-  free(I2);
-  free(I3);
+  free (&I[0]);
+  free (&I[1]);
+  free (&I[2]);
 
   for (int i = 0; i < length; i++) {
     if (abs(If[i]) > Imax) {
