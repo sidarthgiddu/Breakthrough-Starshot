@@ -79,6 +79,7 @@ class floatTuple
 class slaveStatus
 {
   public:
+    bool ADCS_Active;
     int Temp;
     int Light;
     int mtX;
@@ -86,17 +87,23 @@ class slaveStatus
     int mtZ;
     int Resets;
     int numPhotos;
-    int CurXDir; //-1 or 1 for Coil Current Direction
-    int CurXPWM; // 0 to 255 for Coil Current Level
-    int CurYDir; //-1 or 1 for Coil Current Direction
-    int CurYPWM; // 0 to 255 for Coil Current Level
-    int CurZDir; //-1 or 1 for Coil Current Direction
-    int CurZPWM; // 0 to 255 for Coil Current Level
+    int CurXDir; //-1 or 1 for Coil Current Direction, 0 is off
+    int CurXPWM; // 0 to 255 for Coil Current Level, 0 is off
+    int CurYDir; //-1 or 1 for Coil Current Direction, 0 is off
+    int CurYPWM; // 0 to 255 for Coil Current Level, 0 is off
+    int CurZDir; //-1 or 1 for Coil Current Direction, 0 is off
+    int CurZPWM; // 0 to 255 for Coil Current Level, 0 is off
     float gyro[3];
     float mag[3];
+    float No_Torquer_gyro[3];
+    float No_Torquer_mag[3];
+    int format; //HEX or DEC
 
-    slaveStatus(float t, int L, int r, int n, int XD, int XP,
-                int YD, int YP, int ZD, int ZP, floatTuple g, floatTuple M) {
+    slaveStatus(int formant, float t = 0, int L = 0, int r = 0, int n = 0, int XD = 0, int XP = 0,
+                int YD = 0, int YP = 0, int ZD = 0, int ZP = 0, bool ADCS = false,
+                floatTuple g = floatTuple(0, 0, 0), floatTuple M = floatTuple(0, 0, 0)) {
+      //Maybe Zeros wont work for ADCS at the start
+      ADCS_Active = ADCS;
       Temp = t;
       Light = L;
       Resets = r;
@@ -109,21 +116,24 @@ class slaveStatus
       CurZPWM = ZP;
       gyro[0] = g.x; gyro[1] = g.y; gyro[2] = g.z;
       mag[0] = M.x; mag[1] = M.y; mag[2] = M.z;
+      No_Torquer_gyro[0] = g.x; No_Torquer_gyro[1] = g.y; No_Torquer_gyro[2] = g.z;
+      No_Torquer_mag[0] = M.x; No_Torquer_mag[1] = M.y; No_Torquer_mag[2] = M.z;
+
     }
     String toString() {
       String res = "";
       res += "{MRsts:" + String(resets);
-      res += ",T:" + String(Temp);
-      res += ",L:" + String(Light);
-      res += ",XD:" + String(CurXDir);
-      res += ",YD:" + String(CurYDir);
-      res += ",ZD:" + String(CurZDir);
-      res += ",XP:" + String(CurXPWM);
-      res += ",YP:" + String(CurYPWM);
-      res += ",ZP:" + String(CurZPWM);
-      res += ",nP:" + String(numPhotos);
-      res += "GX:" + String(gyro[0]) + ",GY:" + String(gyro[1]) + ",GZ:" + String(gyro[2]) + ",";
-      res += "MX:" + String(mag[0]) + ",MY:" + String(mag[1]) + ",MZ:" + String(mag[2]) + ",";
+      res += ",T:" + String(Temp, format);
+      res += ",L:" + String(Light, format);
+      res += ",XD:" + String(CurXDir, format);
+      res += ",YD:" + String(CurYDir, format);
+      res += ",ZD:" + String(CurZDir, format);
+      res += ",XP:" + String(CurXPWM, format);
+      res += ",YP:" + String(CurYPWM, format);
+      res += ",ZP:" + String(CurZPWM, format);
+      res += ",nP:" + String(numPhotos, format);
+      res += "GX:" + String(gyro[0], format) + ",GY:" + String(gyro[1], format) + ",GZ:" + String(gyro[2], format) + ",";
+      res += "MX:" + String(mag[0], format) + ",MY:" + String(mag[1], format) + ",MZ:" + String(mag[2], format) + ",";
       res += "}||||";
       return res;
     }
@@ -144,8 +154,8 @@ class slaveStatus
       CurZPWM = PWM.z;
     }
 };
-slaveStatus StatusHolder = slaveStatus(0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                                       floatTuple(0, 0, 0), floatTuple(0, 0, 0));
+slaveStatus StatusHolder = slaveStatus(DEC); //DEC for Decimal Output
+
 
 class commandBuffer {
   public:
@@ -264,7 +274,7 @@ static inline float sgn(float val) {
 }
 // Placeholder Test Data
 float gData[3] = {0.2, 0.04, -0.1};
-float mData[3] = {0.00002*1000, 0.0004*1000, -0.0009*1000};
+float mData[3] = {0.00002 * 1000, 0.0004 * 1000, -0.0009 * 1000};
 float Kp = 1e-3;
 float Kd = 1e-3;
 
@@ -400,6 +410,9 @@ void loopPopCommand() {
         case (23):
           StatusHolder.mag[2] = currentCommand[1];
           break;
+        case (51):
+          StatusHolder.ADCS_Active = currentCommand[1];
+          break;
       }
     } else {
       Serial.println("No Command");
@@ -408,16 +421,15 @@ void loopPopCommand() {
 }
 
 
-////////////////////////////////
-////////////////////////////////
-////////////////////////////////
-////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 
 // function that executes whenever data is received from master
 // this function is registered as an event, see setup()
 void commandParser(int nBytes) {
-  //Need nBytes?
+  lastMasterCom = millis();
   String command = "";
   while (1 <= Wire.available()) { // loop through all but the last
     char c = Wire.read(); // receive byte as a character
@@ -425,25 +437,25 @@ void commandParser(int nBytes) {
   }
   //Parse Command
   if (isInputValid(command)) {
-    Serial.println("Command is Valid");
+    //Serial.println("Command is Valid");
     buildBuffer(command);
-    Serial.println("Built Command Buffer Successfully");
+    //Serial.println("Built Command Buffer Successfully");
 
     //popCommand
 
   } else {
-    Serial.println("Invalid Command");
+    //Serial.println("Invalid Command");
   }
 }
 
 
 void requestEvent() {
+  lastMasterCom = millis();
   Serial.println("Data Request");
   String r = StatusHolder.toString();
   char response[r.length()];
   r.toCharArray(response, r.length());
   Wire.write(response);
-  lastMasterCom = millis();
 }
 
 void initalizePinOut() {
@@ -499,17 +511,12 @@ void setup() {
 
   initalizePinOut();
 
-  //digitalWrite(MasterReset, HIGH); //Enable Master
+  digitalWrite(MasterReset, HIGH); //Enable Master
   Wire.begin(8);
   // join i2c bus with address #8
   Wire.onReceive(commandParser);
   Wire.onRequest(requestEvent);
 
-  //int endT = millis() + manualTimeoutS;
-  //while (!imu.begin() && millis() < endT);
-  //if (!imu.begin()) {
-  //  imuWorking = false;
-  //}
 
   //Reset Indication
   pinMode(8, OUTPUT);
@@ -529,22 +536,27 @@ void setup() {
 int ledState = HIGH;
 long ledLastTime = 0;
 long lastADCSTime = 0;
+int ADCS_CycleTime = 100; //Time to leave coils on before updating Inputs
+int ADCS_CharactTime = 50; //Max Time to Zero Current in Coils w/0V Applied
+
+
 void loop() {
   StatusHolder.updatePassive();
-  //StatusHolder.updateTorquers(floatTuple TorquerOutput);
-
-  //popCommand();
 
   //Test ADCS
-  if (millis() - lastADCSTime >= 4000) {
-    runADCS(mData, gData, Kp, Kd); //placeholders
-    Serial.print("X axis: "); Serial.print(StatusHolder.CurXDir,20); Serial.print(" "); Serial.println(StatusHolder.CurXPWM,20);
-    Serial.print("Y axis: "); Serial.print(StatusHolder.CurYDir,20); Serial.print(" "); Serial.println(StatusHolder.CurYPWM,20);
-    Serial.print("Z axis: "); Serial.print(StatusHolder.CurZDir,20); Serial.print(" "); Serial.println(StatusHolder.CurZPWM,20);
-    lastADCSTime = millis();
+  if (StatusHolder.ADCS_Active) {
+    if  (millis() - lastADCSTime >= ADCS_CycleTime) {
+      if (millis() - lastADCSTime >= ADCS_CycleTime + ADCS_CharactTime) {
+        //runADCS(mData, gData, Kp, Kd); //placeholder
+        runADCS(StatusHolder.mag, StatusHolder.gyro, Kp, Kd); //Activate Coils
+        lastADCSTime = millis();
+      } else {
+        //disableTorquers(); //Let Sensors Get Valid Mag Data
+      }
+    }
   }
 
-  //Reset Master if No Communication for 5 min
+  //Reset Master if No Communication for 5 min //Maybe Not Feasible
   //  if (TestReset && (millis() - lastMasterCom > MasterFaultTime)) {
   //    digitalWrite(MasterReset, LOW);
   //    resets++;
