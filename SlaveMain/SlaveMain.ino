@@ -1,4 +1,5 @@
 #include <Wire.h>
+#include "BigNumber.h"
 #include <MatrixMath.h>
 
 ////Constant Initialization
@@ -187,64 +188,66 @@ commandBuffer cBuf;
 ////////////////////////////////
 ////////////////////////////////
 
-float mass = 1.33;
-float Bfield[3];
-float w[3];
-float Inertia[3][3] = {{mass / 6, 0, 0},
+BigNumber mass = 1.33;
+BigNumber Bfield[3];
+BigNumber w[3];
+BigNumber Inertia[3][3] = {{mass / 6, 0, 0},
   {0, mass / 6, 0},
   {0, 0, mass / 6}
 }; // Inertia initialization
-float E = 1e-4;
+BigNumber E = 1e-4;
 
-void runADCS(float* Bvalues, float* gyroData, float Kp, float Kd) {
-  float J[9] = {0, Bvalues[2], -Bvalues[1], -Bvalues[2], 0, Bvalues[0], Bvalues[1], -Bvalues[0], 0};
+void runADCS(BigNumber* Bvalues, BigNumber* gyroData, BigNumber Kp, BigNumber Kd) {
+  BigNumber J[9] = {0, Bvalues[2], -Bvalues[1], -Bvalues[2], 0, Bvalues[0], Bvalues[1], -Bvalues[0], 0};
 
-  Matrix.Copy((float*)Bvalues, 1, 3, (float*)Bfield); // create new field to scale for the pseudo-inverse
-  Matrix.Scale((float*)Bfield, 3, 1, E); // scale duplicated Bfield array with E for pseudo-inverse
+  Matrix.Copy((BigNumber*)Bvalues, 1, 3, (BigNumber*)Bfield); // create new field to scale for the pseudo-inverse
+  Matrix.Scale((BigNumber*)Bfield, 3, 1, E); // scale duplicated Bfield array with E for pseudo-inverse
 
-  float Jnew[4][3] = {{J[0], J[1], J[2]},
+  BigNumber Jnew[4][3] = {{J[0], J[1], J[2]},
     {J[3], J[4], J[5]},
     {J[6], J[7], J[8]},
     {Bfield[0]*E, Bfield[1]*E, Bfield[2]*E}
   };
 
-  float Jtranspose[3][4];
-  float Jproduct[3][3];
-  float Jppinv[3][4];
+  BigNumber Jtranspose[3][4];
+  BigNumber Jproduct[3][3];
+  BigNumber Jppinv[3][4];
 
-  Matrix.Transpose((float*)Jnew, 4, 3, (float*)Jtranspose); // transpose(Jnew)
-  Matrix.Multiply((float*)Jtranspose, (float*)Jnew, 3, 4, 3, (float*)Jproduct); //transpose(Jnew)*Jnew=Anew
-  Matrix.Invert((float*)Jproduct, 3); // inverse(transpose(Jnew)*Jnew)=Bnew
-  Matrix.Multiply((float*)Jproduct, (float*)Jtranspose, 3, 3, 4, (float*)Jppinv); // Bnew*transpose(Jnew)=Cnew
+  Matrix.Transpose((BigNumber*)Jnew, 4, 3, (BigNumber*)Jtranspose); // transpose(Jnew)
+  Matrix.Multiply((BigNumber*)Jtranspose, (BigNumber*)Jnew, 3, 4, 3, (BigNumber*)Jproduct); //transpose(Jnew)*Jnew=Anew
+  Matrix.Invert((BigNumber*)Jproduct, 3); // inverse(transpose(Jnew)*Jnew)=Bnew
+  Matrix.Multiply((BigNumber*)Jproduct, (BigNumber*)Jtranspose, 3, 3, 4, (BigNumber*)Jppinv); // Bnew*transpose(Jnew)=Cnew
 
-  float Jpinv[3][3] = {{Jppinv[0][0], Jppinv[0][1], Jppinv[0][2]},
+  BigNumber Jpinv[3][3] = {{Jppinv[0][0], Jppinv[0][1], Jppinv[0][2]},
     {Jppinv[1][0], Jppinv[1][1], Jppinv[1][2]},
     {Jppinv[2][0], Jppinv[2][1], Jppinv[2][2]}
   };
 
-  float current[3][1];
-  float OmegaError[3][1], BfieldError[3][1], ErrorSum[3][1];
-  float Omegacmd[3][1] = {0, 0, 1};
-  float Bcmd[3][1] = {0, 0, 1};
-  float A = 0.532;
+  BigNumber current[3][1];
+  BigNumber OmegaError[3][1], BfieldError[3][1], ErrorSum[3][1];
+  BigNumber Omegacmd[3][1] = {0, 0, 1};
+  BigNumber Bcmd[3][1] = {0, 0, 1};
+  BigNumber A = 0.532;
 
-  Matrix.Subtract((float*) Bvalues, (float*) Bcmd, 3, 1, (float*) BfieldError);
-  Matrix.Subtract((float*) gyroData, (float*) Omegacmd, 3, 1, (float*) OmegaError);
+  Matrix.Subtract((BigNumber*) Bvalues, (BigNumber*) Bcmd, 3, 1, (BigNumber*) BfieldError);
+  Matrix.Subtract((BigNumber*) gyroData, (BigNumber*) Omegacmd, 3, 1, (BigNumber*) OmegaError);
 
-  Matrix.Scale((float*)BfieldError, 3, 1, Kp / A); // scale error with proportional gain (updates array)
-  Matrix.Scale((float*)OmegaError, 3, 1, Kd / A); // scale error with derivative gain (updates array)
+  Matrix.Scale((BigNumber*)BfieldError, 3, 1, Kp / A); // scale error with proportional gain (updates array)
+  Matrix.Scale((BigNumber*)OmegaError, 3, 1, Kd / A); // scale error with derivative gain (updates array)
 
-  Matrix.Add((float*)BfieldError, (float*)OmegaError, 3, 1, (float*) ErrorSum);
-  Matrix.Scale((float*) ErrorSum, 3, 1, -1.0); // prep error for multiplication with the Jpinv matrix
-  Matrix.Multiply((float*) Jpinv, (float*) ErrorSum, 3, 3, 1, (float*) current);
+  Matrix.Add((BigNumber*)BfieldError, (BigNumber*)OmegaError, 3, 1, (BigNumber*) ErrorSum);
+  Matrix.Scale((BigNumber*) ErrorSum, 3, 1, -1.0); // prep error for multiplication with the Jpinv matrix
+  Matrix.Multiply((BigNumber*) Jpinv, (BigNumber*) ErrorSum, 3, 3, 1, (BigNumber*) current);
 
-  Matrix.Print((float*) Jproduct, 3, 3, "check");
+  Matrix.Print((BigNumber*) Jproduct, 3, 3, "check");
 
-  outputPWM((float*) current, 3);
+  outputPWM((BigNumber*) current, 3);
 }
 
-void outputPWM(float* I, int length) {
-  float Imax = 2.0;
+void outputPWM(BigNumber* I, int length) {
+  BigNumber Imax = 2.0;
+  float Imaxf;
+  float I1f, I2f, I3f;
 
   for (int i = 0; i < length; i++) {
     if (abs(I[i]) > Imax) {
@@ -253,9 +256,9 @@ void outputPWM(float* I, int length) {
   }
 
   // CREATE PWM OUT SIGNAL
-  //analogWrite(CX_PWM, I[1] / Imax * 255);
-  //analogWrite(CY_PWM, I[2] / Imax * 255);
-  //analogWrite(CZ_PWM, I[3] / Imax * 255);
+  //analogWrite(CX_PWM, I[1] / Imaxf * 255);
+  //analogWrite(CY_PWM, I[2] / Imaxf * 255);
+  //analogWrite(CZ_PWM, I[3] / Imaxf * 255);
 
   floatTuple PWMvaluesForTorquers = floatTuple(I[1] / Imax * 255, I[2] / Imax * 255, I[3] / Imax * 255);
   floatTuple PWMdirectionsForTorquers = floatTuple(sgn(I[0]), sgn(I[1]), sgn(I[2]));
