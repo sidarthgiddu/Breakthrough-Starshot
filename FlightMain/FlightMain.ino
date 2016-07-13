@@ -1,7 +1,7 @@
 #include <Adafruit_LSM9DS0.h>
 #include <Adafruit_Sensor.h>
 #include <Wire.h>
-#include <IridiumSBD.h> //IT WORKS?!?!?!
+//#include <IridiumSBD.h> //IT WORKS?!?!?!
 
 //State Machine Definition
 #define DORMANT_CRUISE 1
@@ -37,6 +37,8 @@ unsigned long forceLPEclipseTime = 180*60*1000;
 float LV_Threshold = 3.2;
 float HV_Threshold = 3.8;
 float EclipseAmp_Threshold = 0.01;
+int LT_Threshold = -10; //C
+int HT_Threshold = 60; //C
 
 
 //IMU and Sensor Test
@@ -61,7 +63,7 @@ int popTime = 4000;
 long lastPopTime = 0;
 
 //RockBlock Test
-IridiumSBD iSBD = IridiumSBD(Serial, 22); //RBSleep Pin
+//IridiumSBD iSBD = IridiumSBD(Serial, 22); //RBSleep Pin
 long SBDCallBackStartTime = 0;
 long RBForcedTimeout = 30 * 1000;
 

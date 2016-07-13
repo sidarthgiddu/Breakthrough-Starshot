@@ -79,6 +79,7 @@ class floatTuple
 class slaveStatus
 {
   public:
+    bool ADCS_Active;
     int Temp;
     int Light;
     int mtX;
