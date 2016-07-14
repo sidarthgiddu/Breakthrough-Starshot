@@ -1,7 +1,7 @@
+
 #include <Adafruit_LSM9DS0.h>
 #include <Adafruit_Sensor.h>
 #include <Wire.h>
-#include <IridiumSBD.h> //IT WORKS?!?!?!
 
 //State Machine Definition
 #define DORMANT_CRUISE 1
@@ -61,7 +61,7 @@ int popTime = 4000;
 long lastPopTime = 0;
 
 //RockBlock Test
-IridiumSBD iSBD = IridiumSBD(Serial, 22); //RBSleep Pin
+//IridiumSBD iSBD = IridiumSBD(Serial, 22); //RBSleep Pin
 long SBDCallBackStartTime = 0;
 long RBForcedTimeout = 30 * 1000;
 
@@ -862,13 +862,23 @@ void loop() {
       break;
 
     case (DEPLOY_ARMED):
-      //Prep Camera
-      //Prep IMU
-      //Activate Nichrome
-      //Wait for DoorSensor
+      sendSCommand(char data[61,1!])  //Prep Camera
+      float IMU[360] //memory to measure once a sec for 6 min
+      float LIGHT
+      digitalWrite(24,HIGH) //Activate Nichrome
+      if (DoorSens == HIGH);
+        digitalWrite(24,LOW) //Wait for DoorSensor
+        
+      else 
+        delay(360000) 
+        digitalWrite(24,LOW)
       break;
 
     case (DEPLOY_VERIF):
+      if (LightSens ==  )
+        Serial.print ("LIGHT SENSOR TRIGGERED") 
+      else
+       Serial.print ("LIGHT SENSOR NOT TRIGGERED") 
       //LightSensor Trigger
       //Image Capture
       //IMU Capture
