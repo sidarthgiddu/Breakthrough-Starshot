@@ -664,7 +664,7 @@ String buildIMUDataCommand() {
   return res;
 }
 
-void sendIMUToSLave() {
+void sendIMUToSlave() {
   String SCommand = buildIMUDataCommand();
   char SComCharA[SCommand.length()];
   SCommand.toCharArray(SComCharA, SCommand.length());
@@ -806,7 +806,7 @@ void loop() {
         if (millis() - lastSComAttempt >= SComTime || commandedSC) {
           lastSComAttempt = millis();
           //Serial.print("Slave Status Report: "); //Stalls here with Wire?
-          sendIMUToSLave();
+          sendIMUToSlave();
           String SlaveResponse = requestFromSlave();
 
           if (!SlaveResponse.equals("")) {
@@ -848,7 +848,7 @@ void loop() {
         }
         spinMagnitude = sqrt(spinMagnitude);
         if (spinMagnitude > OmegaThreshold){
-          
+          sendSCommand("91,1!"); //Activate Torquers
         }
       }
 
@@ -893,7 +893,8 @@ void loop() {
       //Check Battery
       //Check Solar Current
       //Check Time
-
+      //Magtorquers off?
+      
       if (getTotalAmperage() > .1 || millis() - eclipseEntry > forceExitEclipseTime) {
         masterStatusHolder.State = NORMAL_OPS;
         normOpEntry = millis();
