@@ -57,6 +57,11 @@ int getLightLvl() {
   return light;
 }
 
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
 class floatTuple
 {
   public:
@@ -96,8 +101,9 @@ class slaveStatus
     float gyro[3];
     float mag[3];
 
-    slaveStatus(float t, int L, int r, int n, int XD, int XP,
-                int YD, int YP, int ZD, int ZP, floatTuple g, floatTuple M) {
+    slaveStatus(float t=0, int L=0, int r=0, int n=0, int XD=0, int XP=0,
+                int YD=0, int YP=0, int ZD=0, int ZP=0, 
+                floatTuple g = floatTuple(0,0,0), floatTuple M = floatTuple(0,0,0)) {
       Temp = t;
       Light = L;
       Resets = r;
@@ -144,8 +150,7 @@ class slaveStatus
       CurZPWM = PWM.z;
     }
 };
-slaveStatus StatusHolder = slaveStatus(0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                                       floatTuple(0, 0, 0), floatTuple(0, 0, 0));
+slaveStatus StatusHolder;
 
 class commandBuffer {
   public:
@@ -327,10 +332,9 @@ BigNumber Kp = "0.001";
 BigNumber Kd = "0.001";
 
 
-////////////////////////////////
-////////////////////////////////
-////////////////////////////////
-////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 ////Parser Functions
 void buildBuffer(String com)
@@ -424,7 +428,7 @@ boolean isInputValid(String input) {
   return valid;
 }
 
-void loopPopCommand() {
+void PopCommands() {
   //Process an Incoming Command
   while (cBuf.openSpot > 0) { //Manual Timeout
     Serial.println ("Executing Command:");
@@ -466,11 +470,9 @@ void loopPopCommand() {
   }
 }
 
-
-////////////////////////////////
-////////////////////////////////
-////////////////////////////////
-////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 
 // function that executes whenever data is received from master
@@ -487,14 +489,12 @@ void commandParser(int nBytes) {
     Serial.println("Command is Valid");
     buildBuffer(command);
     Serial.println("Built Command Buffer Successfully");
-
-    //popCommand
+    PopCommands();
 
   } else {
     Serial.println("Invalid Command");
   }
 }
-
 
 void requestEvent() {
   Serial.println("Data Request");
@@ -559,18 +559,12 @@ void setup() {
   BigNumber:: setScale(25);
 
   initalizePinOut();
+  slaveStatus StatusHolder = slaveStatus();
 
   //digitalWrite(MasterReset, HIGH); //Enable Master
   Wire.begin(8);
-  // join i2c bus with address #8
   Wire.onReceive(commandParser);
   Wire.onRequest(requestEvent);
-
-  //int endT = millis() + manualTimeoutS;
-  //while (!imu.begin() && millis() < endT);
-  //if (!imu.begin()) {
-  //  imuWorking = false;
-  //}
 
   //Reset Indication
   pinMode(8, OUTPUT);
@@ -582,19 +576,16 @@ void setup() {
   }
 
   //Forced Stall
-  pinMode(12, INPUT_PULLUP);
-  attachInterrupt(digitalPinToInterrupt(12), forcedStall, LOW);
-
+//  pinMode(12, INPUT_PULLUP);
+//  attachInterrupt(digitalPinToInterrupt(12), forcedStall, LOW);
 }
 
 int ledState = HIGH;
 long ledLastTime = 0;
 long lastADCSTime = 0;
+
 void loop() {
   StatusHolder.updatePassive();
-  //StatusHolder.updateTorquers(floatTuple TorquerOutput);
-
-  //popCommand();
 
   //Test ADCS
   if (millis() - lastADCSTime >= 2000) {
