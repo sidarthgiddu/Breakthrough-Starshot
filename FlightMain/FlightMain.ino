@@ -15,7 +15,6 @@
 #define DEPLOY_DOWN_LK 8
 #define LOW_POWER      9
 #define SAFE_MODE     10
-#define esdfg     11
 
 ////Constant Initialization
 unsigned long cruiseEnd = 30 * 60 * 1000;
@@ -42,6 +41,9 @@ float EclipseAmp_Threshold = 0.01;
 int LT_Threshold = -10; //C
 int HT_Threshold = 60; //C
 
+//RockBlock Test
+unsigned long lastRBCheck = 0;
+long RBCheckTime = 5 * 60 * 1000;
 
 //IMU and Sensor Test
 bool SensorFetch = false;
@@ -59,6 +61,11 @@ long lastSComAttempt = 0;
 int SComTime = 10;
 long SlaveResetTimeOut = 30 * 1000;
 int slaveDataSize = 100;
+
+//ADCS Test
+unsigned long LastSpinCheckT = 0;
+long SpinCheckTime = 5 * 60 * 1000;
+float OmegaThreshold = 30; //Degrees per second
 
 //Serial Command Test
 int popTime = 4000;
@@ -135,16 +142,7 @@ class floatTuple
 
 //IMU Code
 
-//void configureSensor()
-//{
-//  //set magnetometer range to +-2 gauss
-//  masterStatusHolder.imu.setupMag(imu.LSM9DS0_MAGGAIN_2GAUSS);
-//  //set gyro range to +-245 degrees per second
-//  masterStatusHolder.imu.setupGyro(imu.LSM9DS0_GYROSCALE_245DPS);
-//}
-
-floatTuple getMagData(Adafruit_LSM9DS0 imu, int wT)
-{
+floatTuple getMagData(Adafruit_LSM9DS0 imu, int wT) {
   int k = 0;
   int sumx = 0;
   int sumy = 0;
@@ -161,8 +159,7 @@ floatTuple getMagData(Adafruit_LSM9DS0 imu, int wT)
   return mData;
 }
 
-floatTuple getGyroData(Adafruit_LSM9DS0 imu, int wT)
-{
+floatTuple getGyroData(Adafruit_LSM9DS0 imu, int wT) {
   int k = 0;
   int sumx = 0;
   int sumy = 0;
@@ -179,8 +176,7 @@ floatTuple getGyroData(Adafruit_LSM9DS0 imu, int wT)
   return gData;
 }
 
-int getImuTempData(Adafruit_LSM9DS0 imu, int wT)
-{
+int getImuTempData(Adafruit_LSM9DS0 imu, int wT) {
   int k = 0;
   int sum = 0;
   long endTime = millis() + long(wT);
@@ -224,8 +220,7 @@ class commandBuffer {
 };
 commandBuffer cBuf;
 
-class masterStatus
-{
+class masterStatus {
   public:
     Adafruit_LSM9DS0 imu;
 
@@ -248,6 +243,7 @@ class masterStatus
     int SlaveWorking;
     int Resets;
 
+    bool ADCS_Active;
     int MResets;
     int CurXDir; //-1 or 1 for Coil Current Direction
     int CurXPWM; // 0 to 255 for Coil Current Level
@@ -261,7 +257,7 @@ class masterStatus
                  float B = 0, float SolarXP = 0, float SolarXM = 0, float SolarYP = 0, float SolarYM = 0,
                  float SolarZP = 0, float SolarZM = 0, int DS = 0, float LS = 0,
                  float AT = 0, int nP = 0, bool IMUW = true, bool SW = true, int R = 0, int MR = 0,
-                 int XD = 0, int XP = 0, int YD = 0, int YP = 0, int ZD = 0, int ZP = 0) {
+                 int XD = 0, int XP = 0, int YD = 0, int YP = 0, int ZD = 0, int ZP = 0, bool ADCS = false) {
 
       State = S;
       imu = Adafruit_LSM9DS0();
@@ -283,6 +279,7 @@ class masterStatus
       SlaveWorking = SW;
       Resets = R;
 
+      ADCS_Active = ADCS;
       MResets = MR;
       CurXDir = XD;
       CurXPWM = XP;
@@ -442,8 +439,7 @@ int freeRam () {
 
 ////Parser Functions
 
-void buildBuffer(String com)
-{
+void buildBuffer(String com) {
   int commandData;
   int commandType;
   String comRemaining = com;
@@ -533,7 +529,7 @@ boolean isInputValid(String input) {
   return valid;
 }
 
-void popCommand() {
+void popCommands() {
   //Process All the Incoming Commands
   while (cBuf.openSpot > 0) { //Manual Timeout
     Serial.println ("Executing Command:");
@@ -583,23 +579,21 @@ void popCommand() {
         case (69):
           masterStatusHolder.CurZPWM = (currentCommand[2]);
           break;
-          case (610):
+        case (610):
           masterStatusHolder.numPhotos = (currentCommand[2]);
           break;
       }
 
     } else {
-      Serial.println("No Command");
+      //Serial.println("No Command");
     }
   }
 }
 
 void readSerialAdd2Buffer() {
   //Modify for RB Communication
-
-
   if (Serial.available() > 0) {
-    Serial.println("Recieving Command");
+    //Serial.println("Recieving Command");
     String comString = "";
     while (Serial.available() > 0) {
       // get the new byte:
@@ -608,11 +602,11 @@ void readSerialAdd2Buffer() {
       comString += inChar;
     }
     if (isInputValid(comString)) {
-      Serial.println("Command is Valid");
+      //Serial.println("Command is Valid");
       buildBuffer(comString);
-      Serial.println("Built Command Buffer Successfully");
+      popCommands();
     } else {
-      Serial.println("Invalid Command");
+      //Serial.println("Invalid Command");
     }
   }
 }
@@ -621,7 +615,7 @@ void readSerialAdd2Buffer() {
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-//Slave Command Functions
+//Slave Functions
 
 /* Supported Commands
   Send Gyro X to Slave: "11,<(String)(float)>!"
@@ -670,8 +664,11 @@ String buildIMUDataCommand() {
   return res;
 }
 
-void slaveParser(String input) {
-
+void sendIMUToSLave() {
+  String SCommand = buildIMUDataCommand();
+  char SComCharA[SCommand.length()];
+  SCommand.toCharArray(SComCharA, SCommand.length());
+  sendSCommand(SComCharA);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -681,34 +678,17 @@ void slaveParser(String input) {
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 // RockBlock Uplink/Downlink Functions
-//      Most stored in IridiumSBD Library
 //
-//bool ISBDCallback()
-//{
-//  unsigned ledOn = (bool)((millis() / 200) % 2);
-//  digitalWrite(13, ledOn); // Blink LED every 1/5 second
-//  //Wire.println("31.200!"); //Test Data by relaying Through Slave
-//
-//  if (SBDCallBackStartTime + RBForcedTimeout > millis()) {
-//    return false;
-//  } else {
-//    return true;
-//  }
-//}
-
-
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
 
 /*  Watchdog timer support for Arduino Zero
     by Richard Hole  December 19, 2015
 */
 
 //setupWDT( 11 );
-
 
 static void   WDTsync() {
   while (WDT->STATUS.bit.SYNCBUSY == 1); //Just wait till WDT is free
@@ -783,8 +763,6 @@ void setup()
 }
 
 void loop() {
-
-
   switch (masterStatusHolder.State) {
     case (NORMAL_OPS):
 
@@ -794,10 +772,9 @@ void loop() {
       //Request Light/Temp Data From Slave
       //}
 
-      //readSerialAdd2Buffer();
-      //if (millis() - lastPopTime >= popTime) {
-      //  popCommand();
-      //}
+      if (millis() - lastRBCheck >= RBCheckTime) {
+        //Do RockBlock Stuff
+      }
 
       //Blinker for Testing
       if (millis() - ledLastTime >= 300) {
@@ -828,26 +805,18 @@ void loop() {
       if (TestSCom) {
         if (millis() - lastSComAttempt >= SComTime || commandedSC) {
           lastSComAttempt = millis();
-          //Serial.print("Slave Status Report: "); //Stalls here with ?
-
-          String SCommand = buildIMUDataCommand();
-          int l = SCommand.length();
-          char SComCharA[l];
-          SCommand.toCharArray(SComCharA, l);
-          sendSCommand(SComCharA);
+          //Serial.print("Slave Status Report: "); //Stalls here with Wire?
+          sendIMUToSLave();
           String SlaveResponse = requestFromSlave();
-          Serial.println(SlaveResponse);
 
           if (!SlaveResponse.equals("")) {
             lastSComTime = millis(); //Reset Timeout if Com is successful
             if (isInputValid(SlaveResponse)) {
+              //Serial.println(Valid Reply From Slave);
               buildBuffer(SlaveResponse);
+            } else {
+              //Serial.println("Invalid Response");
             }
-            //Valid Reply From Slave:
-
-            //SlaveParser
-
-            Serial.println("Valid Reply");
           } else {
             //No Reply From Slave
             //            if (millis() - lastSComTime > SlaveResetTimeOut) {
@@ -860,11 +829,7 @@ void loop() {
             //                delay(50);
             //                digitalWrite(SlaveReset, HIGH);
             //                SlaveResets++;
-            //                //delay(3000);
-            //                //Wire.beginTransmission(8); // transmit to device #8
-            //                //Wire.write("Reset");   // sends String
-            //                //Wire.endTransmission();    // stop transmitting
-            //
+            //                //delay(1000);
             //                Serial.println("Slave Reset");
             //              }
             //            } else {
@@ -875,6 +840,18 @@ void loop() {
           }
         }
       }
+      //ADCS
+      if (millis() - LastSpinCheckT > SpinCheckTime) {
+        float spinMagnitude = 0;
+        for (int i = 0; i < 3; i++) {
+          spinMagnitude = pow(masterStatusHolder.Gyro[i], 2);
+        }
+        spinMagnitude = sqrt(spinMagnitude);
+        if (spinMagnitude > OmegaThreshold){
+          
+        }
+      }
+
       //Eclipse Detection
       if (getTotalAmperage() < EclipseAmp_Threshold) {
         masterStatusHolder.State = ECLIPSE;
