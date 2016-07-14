@@ -1,7 +1,8 @@
+
 #include <Adafruit_LSM9DS0.h>
 #include <Adafruit_Sensor.h>
 #include <Wire.h>
-#include <IridiumSBD.h> //IT WORKS?!?!?!
+//#include <IridiumSBD.h> //IT WORKS?!?!?!
 
 //State Machine Definition
 #define DORMANT_CRUISE 1
@@ -48,7 +49,7 @@ int popTime = 4000;
 long lastPopTime = 0;
 
 //RockBlock Test
-IridiumSBD iSBD = IridiumSBD(Serial, 22); //RBSleep Pin
+//IridiumSBD iSBD = IridiumSBD(Serial, 22); //RBSleep Pin
 long SBDCallBackStartTime = 0;
 long RBForcedTimeout = 30 * 1000;
 
@@ -378,6 +379,20 @@ float getCurrentAmp(int panel) {
   // 4V/A with a 40k Resistor
   return current;
 }
+
+float getTotalAmperage () {
+  //Check the amps from each solar panel and returns total amperage
+  float TotalCurrent = 0;
+  for (int i = 1 ; i <= 6; i++) {
+     TotalCurrent += getCurrentAmp(i);
+  }
+  return TotalCurrent;
+}
+
+
+
+
+
 
 //Determine Remaining RAM
 extern "C" char *sbrk(int i);
