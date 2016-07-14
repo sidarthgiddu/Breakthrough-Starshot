@@ -242,6 +242,8 @@ class masterStatus {
     int IMUWorking;
     int SlaveWorking;
     int Resets;
+    bool PayloadDeployed;
+    
 
     bool ADCS_Active;
     int MResets;
@@ -257,9 +259,11 @@ class masterStatus {
                  float B = 0, float SolarXP = 0, float SolarXM = 0, float SolarYP = 0, float SolarYM = 0,
                  float SolarZP = 0, float SolarZM = 0, int DS = 0, float LS = 0,
                  float AT = 0, int nP = 0, bool IMUW = true, bool SW = true, int R = 0, int MR = 0,
-                 int XD = 0, int XP = 0, int YD = 0, int YP = 0, int ZD = 0, int ZP = 0, bool ADCS = false) {
+                 int XD = 0, int XP = 0, int YD = 0, int YP = 0, int ZD = 0, int ZP = 0, bool ADCS = false,
+                 bool pd = false) {
 
       State = S;
+      PayloadDeployed = pd;
       imu = Adafruit_LSM9DS0();
       Gyro[0] = g.x; Gyro[1] = g.y; Gyro[2] = g.z;
       Mag[0] = M.x; Mag[1] = M.y; Mag[2] = M.z;
@@ -905,25 +909,28 @@ void loop() {
     case (DEPLOY_ARMED):
       sendSCommand(char data[61,1!])  //Prep Camera
       float IMU[360]; //memory to measure once a sec for 6 min
-      float LIGHT [24]; //memory to measure light every 30 seconds
+      float LIGHT [60]; //memory to measure light every 10 seconds
+      float Acceldata[];
       digitalWrite(24,HIGH); //Activate Nichrome
-      if (DoorSens == LOW);//Wait for DoorSensor
-        sendSCommand() //Trigger Camera
+      bool DoorOpen = false
+      for (int j=0; j<Acceldata,length (), j++) //Wait for DoorSensor, check for spikes in accelerometer
+        if Acceldata[j] > "" || (DoorSens == LOW);
+        DoorOpen=true;
+        sendSCommand() ;//Trigger Camera
         digitalWrite(24,LOW); 
+        break
       else 
-        delay(360000);
-        digitalWrite(24,LOW);
+      delay(60000) //wait one minute
+      sendSCommand() ;// if nothing happens in one minute Trigger Camera
+      delay(360000); //wait another 6 minutes until disabling door trigger
+      digitalWrite(24,LOW);
       break;
 
     case (DEPLOY_VERIF):
-      SlaveResponse = requestFromSlave();
-      buildBuffer(SlaveResponse);
+      buildBuffer(requestFromSlave());
       if (LightSens > " " ) //LightSensor Trigger
-        Serial.print ("LIGHT SENSOR TRIGGERED") 
+        masterStatusHolder.PayloadDeployed == true;  
       else
-       Serial.print ("LIGHT SENSOR NOT TRIGGERED") 
-      //Image Capture
-      //IMU Capture
       break;
 
     case (DEPLOY_DOWN_LK):
