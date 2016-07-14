@@ -123,14 +123,14 @@ class slaveStatus
       res += "61," + String(resets); //Resets
       res += "!62," + String(Temp); //Temp
       res += "!63," + String(Light); //Light
-      res += "!64," + String(CurXDir); 
+      res += "!64," + String(CurXDir);
       res += "!65," + String(CurYDir);
       res += "!66," + String(CurZDir);
       res += "!67," + String(CurXPWM);
       res += "!68," + String(CurYPWM);
       res += "!69," + String(CurZPWM);
       res += "!610," + String(numPhotos);
-      res += "!"
+      res += "!";
       return res;
     }
     void print() {
@@ -179,25 +179,55 @@ class commandBuffer {
 };
 commandBuffer cBuf;
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-BigNumber mass = 1.33;
-BigNumber zero=0.0, six=6.0;
+////////////////////////////////
+////////////////////////////////
+////////////////////////////////
+BigNumber mass = "1.33";
+BigNumber zero = 0, six = 6;
 BigNumber Bfield[3];
 BigNumber w[3];
 BigNumber Inertia[3][3] = {{mass / six, zero, zero},
   {zero, mass / six, zero},
   {zero, zero, mass / six}
 }; // Inertia initialization
-BigNumber E = 1e-4;
+BigNumber E = "0.0001";
 
-void runADCS(float* Magfield, float* omega, BigNumber Kp, BigNumber Kd) {
-  BigNumber gyroData[3]={omega[0],omega[1],omega[2]};
-  BigNumber Bvalues[3]={Magfield[0],Magfield[1],Magfield[2]};
-  
+void runADCS(double* Magfield, double* omega, BigNumber Kp, BigNumber Kd) {
+
+  String sx = String(omega[0], 12);
+  String sy = String(omega[1], 12);
+  String sz = String(omega[2], 12);
+  char om1[sx.length()];
+  sx.toCharArray(om1, sx.length());
+  char om2[sy.length()];
+  sy.toCharArray(om2, sy.length());
+  char om3[sz.length()];
+  sz.toCharArray(om3, sz.length());
+
+  BigNumber o1 = om1;
+
+  String bx = String(Magfield[0], 12);
+  String by = String(Magfield[1], 12);
+  String bz = String(Magfield[2], 12);
+  char bom1[bx.length()];
+  bx.toCharArray(bom1, bx.length());
+  char bom2[by.length()];
+  by.toCharArray(bom2, by.length());
+  char bom3[bz.length()];
+  bz.toCharArray(bom3, bz.length());
+
+  BigNumber gyroData[3] = {BigNumber(om1), BigNumber(om2), BigNumber(om3)};
+  BigNumber Bvalues[3] = {BigNumber(bom1), BigNumber(bom2), BigNumber(bom3)};
+
+  //Matrix.Print((BigNumber*) gyroData, 3, 1, "gyrodata");
+  //Matrix.Print((BigNumber*) Bvalues, 3, 1, "gyrodata");
+
   BigNumber J[9] = {0, Bvalues[2], -Bvalues[1], -Bvalues[2], 0, Bvalues[0], Bvalues[1], -Bvalues[0], 0};
+
+  Serial.print("Jacobian");
+  for (int i = 0; i < 9; i++) {
+    printBignum (J[i]); Serial.println(" ");
+  }
 
   Matrix.Copy((BigNumber*)Bvalues, 1, 3, (BigNumber*)Bfield); // create new field to scale for the pseudo-inverse
   Matrix.Scale((BigNumber*)Bfield, 3, 1, E); // scale duplicated Bfield array with E for pseudo-inverse
@@ -208,14 +238,22 @@ void runADCS(float* Magfield, float* omega, BigNumber Kp, BigNumber Kd) {
     {Bfield[0]*E, Bfield[1]*E, Bfield[2]*E}
   };
 
+  //Matrix.Print((BigNumber*) Jnew, 4, 3, "check");
+
   BigNumber Jtranspose[3][4];
   BigNumber Jproduct[3][3];
   BigNumber Jppinv[3][4];
 
   Matrix.Transpose((BigNumber*)Jnew, 4, 3, (BigNumber*)Jtranspose); // transpose(Jnew)
+  Serial.println ("Step 1 complete");
+  Matrix.Print((BigNumber*) Jtranspose, 3, 4, "check");
   Matrix.Multiply((BigNumber*)Jtranspose, (BigNumber*)Jnew, 3, 4, 3, (BigNumber*)Jproduct); //transpose(Jnew)*Jnew=Anew
+  Serial.println ("Step 2 complete");
+
   Matrix.Invert((BigNumber*)Jproduct, 3); // inverse(transpose(Jnew)*Jnew)=Bnew
+  Serial.println ("Step 3 complete");
   Matrix.Multiply((BigNumber*)Jproduct, (BigNumber*)Jtranspose, 3, 3, 4, (BigNumber*)Jppinv); // Bnew*transpose(Jnew)=Cnew
+  Serial.println ("Step 4 complete");
 
   BigNumber Jpinv[3][3] = {{Jppinv[0][0], Jppinv[0][1], Jppinv[0][2]},
     {Jppinv[1][0], Jppinv[1][1], Jppinv[1][2]},
@@ -229,26 +267,31 @@ void runADCS(float* Magfield, float* omega, BigNumber Kp, BigNumber Kd) {
   BigNumber A = 0.532;
 
   Matrix.Subtract((BigNumber*) Bvalues, (BigNumber*) Bcmd, 3, 1, (BigNumber*) BfieldError);
+  Serial.println ("Step 5 complete");
   Matrix.Subtract((BigNumber*) gyroData, (BigNumber*) Omegacmd, 3, 1, (BigNumber*) OmegaError);
+  Serial.println ("Step 6 complete");
 
   Matrix.Scale((BigNumber*)BfieldError, 3, 1, Kp / A); // scale error with proportional gain (updates array)
+  Serial.println ("Step 7 complete");
   Matrix.Scale((BigNumber*)OmegaError, 3, 1, Kd / A); // scale error with derivative gain (updates array)
+  Serial.println ("Step 8 complete");
 
   Matrix.Add((BigNumber*)BfieldError, (BigNumber*)OmegaError, 3, 1, (BigNumber*) ErrorSum);
+  Serial.println ("Step 9 complete");
   Matrix.Scale((BigNumber*) ErrorSum, 3, 1, -1.0); // prep error for multiplication with the Jpinv matrix
+  Serial.println ("Step 10 complete");
   Matrix.Multiply((BigNumber*) Jpinv, (BigNumber*) ErrorSum, 3, 3, 1, (BigNumber*) current);
-
-  Matrix.Print((BigNumber*) Jproduct, 3, 3, "check");
+  Serial.println ("Step 11 complete");
 
   outputPWM((BigNumber*) current, 3);
 }
 
 void outputPWM(BigNumber* I, int length) {
   float Imax = 2.0;
-  String I1=I[0].toString();
-  String I2=I[1].toString();
-  String I3=I[2].toString();
-  float If[3]={I1.toFloat(),I2.toFloat(),I3.toFloat()};
+  String I1 = I[0].toString();
+  String I2 = I[1].toString();
+  String I3 = I[2].toString();
+  float If[3] = {I1.toFloat(), I2.toFloat(), I3.toFloat()};
   free (&I[0]);
   free (&I[1]);
   free (&I[2]);
@@ -270,16 +313,24 @@ void outputPWM(BigNumber* I, int length) {
 
 }
 
+void printBignum (BigNumber n)
+{
+  char * s = n.toString ();
+  Serial.println (s);
+  free (s);
+}  // end of printBignum
+
 static inline float sgn(float val) {
   if (val < 0.0) return -1.0;
   if (val == 0.0) return 0.0;
   return 1.0;
 }
 // Placeholder Test Data
-float gData[3] = {0.2, 0.04, -0.1};
-float mData[3] = {0.00002, 0.0004, -0.0009};
-BigNumber Kp = 1e-3;
-BigNumber Kd = 1e-3;
+double gData[3] = {0.2, 0.04, -0.1};
+double mData[3] = {0.00002, 0.0004, -0.0009};
+BigNumber Kp = "0.001";
+BigNumber Kd = "0.001";
+
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -504,6 +555,8 @@ void forcedStall() {
 void setup() {
   Serial.begin(9600);
   delay(1000);
+  BigNumber:: begin ();
+  BigNumber:: setScale(25);
 
   initalizePinOut();
   slaveStatus StatusHolder = slaveStatus();
@@ -535,11 +588,12 @@ void loop() {
   StatusHolder.updatePassive();
 
   //Test ADCS
-  if (millis() - lastADCSTime >= 3000) {
+  if (millis() - lastADCSTime >= 2000) {
+    printBignum(Kd);
     runADCS(mData, gData, Kp, Kd); //placeholders
-    Serial.print("X axis: "); Serial.print(StatusHolder.CurXDir,20); Serial.print(" "); Serial.println(StatusHolder.CurXPWM,20);
-    Serial.print("Y axis: "); Serial.print(StatusHolder.CurYDir,20); Serial.print(" "); Serial.println(StatusHolder.CurYPWM,20);
-    Serial.print("Z axis: "); Serial.print(StatusHolder.CurZDir,20); Serial.print(" "); Serial.println(StatusHolder.CurZPWM,20);
+    Serial.print("X axis: "); Serial.print(StatusHolder.CurXDir, 20); Serial.print(" "); Serial.println(StatusHolder.CurXPWM, 20);
+    Serial.print("Y axis: "); Serial.print(StatusHolder.CurYDir, 20); Serial.print(" "); Serial.println(StatusHolder.CurYPWM, 20);
+    Serial.print("Z axis: "); Serial.print(StatusHolder.CurZDir, 20); Serial.print(" "); Serial.println(StatusHolder.CurZPWM, 20);
     lastADCSTime = millis();
   }
 

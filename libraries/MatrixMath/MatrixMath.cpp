@@ -12,6 +12,13 @@
 
 MatrixMath Matrix;			// Pre-instantiate
 
+void printBignum (BigNumber n)
+{
+    char * s = n.toString ();
+    Serial.println (s);
+    free (s);
+}  // end of printBignum
+
 // Matrix Printing Routine
 // Uses tabs to separate numbers under assumption printed float width won't cause problems
 void MatrixMath::Print(float* A, int m, int n, String label){
@@ -21,7 +28,7 @@ void MatrixMath::Print(float* A, int m, int n, String label){
     Serial.println(label);
     for (i=0; i<m; i++){
         for (j=0;j<n;j++){
-            Serial.print(A[n*i+j]);
+            printBignum(A[n*i+j]);
             Serial.print("\t");
         }
         Serial.println();
