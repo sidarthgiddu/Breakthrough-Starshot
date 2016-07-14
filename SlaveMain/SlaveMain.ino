@@ -113,19 +113,18 @@ class slaveStatus
     }
     String toString() {
       String res = "";
-      res += "{MRsts:" + String(resets);
-      res += ",T:" + String(Temp);
-      res += ",L:" + String(Light);
-      res += ",XD:" + String(CurXDir);
-      res += ",YD:" + String(CurYDir);
-      res += ",ZD:" + String(CurZDir);
-      res += ",XP:" + String(CurXPWM);
-      res += ",YP:" + String(CurYPWM);
-      res += ",ZP:" + String(CurZPWM);
-      res += ",nP:" + String(numPhotos);
-      res += "GX:" + String(gyro[0]) + ",GY:" + String(gyro[1]) + ",GZ:" + String(gyro[2]) + ",";
-      res += "MX:" + String(mag[0]) + ",MY:" + String(mag[1]) + ",MZ:" + String(mag[2]) + ",";
-      res += "}||||";
+      //
+      res += "61," + String(resets); //Resets
+      res += "!62," + String(Temp); //Temp
+      res += "!63," + String(Light); //Light
+      res += "!64," + String(CurXDir); 
+      res += "!65," + String(CurYDir);
+      res += "!66," + String(CurZDir);
+      res += "!67," + String(CurXPWM);
+      res += "!68," + String(CurYPWM);
+      res += "!69," + String(CurZPWM);
+      res += "!610," + String(numPhotos);
+      res += "!"
       return res;
     }
     void print() {
