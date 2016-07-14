@@ -277,7 +277,7 @@ static inline float sgn(float val) {
 }
 // Placeholder Test Data
 float gData[3] = {0.2, 0.04, -0.1};
-float mData[3] = {0.00002*1000, 0.0004*1000, -0.0009*1000};
+float mData[3] = {0.00002, 0.0004, -0.0009};
 BigNumber Kp = 1e-3;
 BigNumber Kd = 1e-3;
 
@@ -535,7 +535,7 @@ void loop() {
   StatusHolder.updatePassive();
 
   //Test ADCS
-  if (millis() - lastADCSTime >= 4000) {
+  if (millis() - lastADCSTime >= 3000) {
     runADCS(mData, gData, Kp, Kd); //placeholders
     Serial.print("X axis: "); Serial.print(StatusHolder.CurXDir,20); Serial.print(" "); Serial.println(StatusHolder.CurXPWM,20);
     Serial.print("Y axis: "); Serial.print(StatusHolder.CurYDir,20); Serial.print(" "); Serial.println(StatusHolder.CurYPWM,20);
