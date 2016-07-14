@@ -19,13 +19,28 @@
 ////Constant Initialization
 unsigned long cruiseEnd = 30 * 60 * 1000;
 unsigned long ledLastTime = millis();
-int cycle = 0;
+long cycle = 0;
 int ledState = LOW;
 unsigned long manualTimeout = 10 * 1000;
 int SlaveResets = 0;
 unsigned long deployTimeOut = 30 * 1000;
-bool hardwareAvTable[8] = {1}; //Hardware Avaliability Table
+bool hardwareAvTable[8] = {true}; //Hardware Avaliability Table
 //[Imu, SX+,SX-,SY+, SY-, SZ+, SZ-,Temp]
+
+//State Machine Transition Flags and Times
+unsigned long eclipseEntry;
+unsigned long lowPowerEntry;
+unsigned long normOpEntry;
+unsigned long initEntry;
+unsigned long initSleepEntry;
+unsigned long forceExitEclipseTime = 50*60*1000;
+unsigned long forceLPEclipseTime = 180*60*1000;
+float LV_Threshold = 3.2;
+float HV_Threshold = 3.8;
+float EclipseAmp_Threshold = 0.01;
+int LT_Threshold = -10; //C
+int HT_Threshold = 60; //C
+
 
 //IMU and Sensor Test
 bool SensorFetch = false;
@@ -36,11 +51,11 @@ int imuSensorDwell = 50;
 
 //Slave Communication Test
 bool slaveWorking = true;
-int recentSlaveCom = 0;
+long recentSlaveCom = 0;
 bool TestSCom = true;
 long lastSComTime = 0;
 long lastSComAttempt = 0;
-int SComTime = 50;
+int SComTime = 10;
 long SlaveResetTimeOut = 30 * 1000;
 int slaveDataSize = 100;
 
@@ -58,9 +73,10 @@ bool commandedSC = false;
 bool commandedDL = false;
 
 //Pinout Numbers
+//TO DO
 const int DoorSens = 13;
 const int DoorTrig = 5;
-const int Battery = A0;
+const int BatteryPin = A0;
 const int RBRx = 0; //RockBlock Serial Into FCom
 const int RBTx = 1; //RockBlock Serial Out of FCom
 const int RBSleep = 22;
@@ -271,6 +287,8 @@ class masterStatus
       SolarZPlus = getCurrentAmp(5); //Z+
       SolarZMinus = getCurrentAmp(6); //Z-
 
+      Battery = analogRead(BatteryPin);
+
       //Request Light/Temp Data From Slave
 
     }
@@ -285,6 +303,7 @@ class masterStatus
       //Produces JSON Output in ASCII  for Downlink
       String output = "";
       output += "{";
+      output += "S:" + String(State)+",";
       output += "GX:" + String(Gyro[0]) + ",GY:" + String(Gyro[1]) + ",GZ:" + String(Gyro[2]) + ",";
       output += "MX:" + String(Mag[0]) + ",MY:" + String(Mag[1]) + ",MZ:" + String(Mag[2]) + ",";
       output += "IT:" + String(ImuTemp) + ",";
@@ -342,43 +361,44 @@ float getCurrentAmp(int panel) {
       if (hardwareAvTable[1]) {
         current = analogRead(SolarXPlus);
       } else {
-        current = 999;
+        current = 0;
       } break;
     case 2:
       if (hardwareAvTable[2]) {
         current = analogRead(SolarXMinus);
       } else {
-        current = 999;
+        current = 0;
       } break;
     case 3:
       if (hardwareAvTable[3]) {
         current = analogRead(SolarYPlus);
       } else {
-        current = 999;
+        current = 0;
       } break;
     case 4:
       if (hardwareAvTable[4]) {
         current = analogRead(SolarYMinus);
       } else {
-        current = 999;
+        current = 0;
       } break;
     case 5:
       if (hardwareAvTable[5]) {
         current = analogRead(SolarZPlus);
       } else {
-        current = 999;
+        current = 0;
       } break;
     case 6:
       if (hardwareAvTable[6]) {
         current = analogRead(SolarZMinus);
       } else {
-        current = 999;
+        current = 0;
       } break;
   }
   current = map(current, 0, 1023, 0, .825); //3.3V=.825A
   // 4V/A with a 40k Resistor
   return current;
 }
+
 
 float getTotalAmperage () {
   //Check the amps from each solar panel and returns total amperage
@@ -388,9 +408,6 @@ float getTotalAmperage () {
   }
   return TotalCurrent;
 }
-
-
-
 
 
 
@@ -548,6 +565,26 @@ void readSerialAdd2Buffer() {
   }
 }
 
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+//Slave Command Functions
+
+/* Supported Commands
+  Send Gyro X to Slave: "11,<(String)(float)>!"
+  Send Gyro Y to Slave: "12,<(String)(float)>!"
+  Send Gyro Z to Slave: "13,<(String)(float)>!"
+  Send Mag X to Slave: "21,<(String)(float)>!"
+  Send Mag Y to Slave: "22,<(String)(float)>!"
+  Send Mag Z to Slave: "23,<(String)(float)>!"
+  Z Torquer On for Heat: "41,1!"
+  Z Torquer Off for Heat: "41,0!"
+  Activate ACDS: "51,1!"
+  Deactivate ACDS: "51,0!"
+  Take a Picture if ready: "61,1!"
+*/
+
 void sendSCommand(char data[]) {
   Wire.beginTransmission(8); // transmit to device #8
   Serial.print("Command Sent to Slave: ");
@@ -581,6 +618,8 @@ String buildIMUDataCommand() {
   return res;
 }
 
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -690,6 +729,7 @@ void setup()
 
 void loop() {
 
+
   switch (masterStatusHolder.State) {
     case (NORMAL_OPS):
 
@@ -733,7 +773,7 @@ void loop() {
       if (TestSCom) {
         if (millis() - lastSComAttempt >= SComTime || commandedSC) {
           lastSComAttempt = millis();
-          Serial.print("Slave Status Report: "); //Stalls here?
+          //Serial.print("Slave Status Report: "); //Stalls here with ?
 
           String SCommand = buildIMUDataCommand();
           int l = SCommand.length();
@@ -747,40 +787,55 @@ void loop() {
             lastSComTime = millis(); //Reset Timeout if Com is successful
 
             //Valid Reply From Slave:
+
+            //SlaveParser
+
             Serial.println("Valid Reply");
           } else {
             //No Reply From Slave
-            if (millis() - lastSComTime > SlaveResetTimeOut) {
-
-              //No Communication for (SlaveResetTimeOut) ms
-              slaveWorking = false;
-
-              if (!slaveWorking) {
-                digitalWrite(SlaveReset, LOW);
-                delay(50);
-                digitalWrite(SlaveReset, HIGH);
-                SlaveResets++;
-                //delay(3000);
-                //Wire.beginTransmission(8); // transmit to device #8
-                //Wire.write("Reset");   // sends String
-                //Wire.endTransmission();    // stop transmitting
-
-                Serial.println("Slave Reset");
-              }
-            } else {
-              Serial.print("No Reply From Slave for ");
-              Serial.print((millis() - lastSComTime) / 1000.0);
-              Serial.println(" seconds");
-            }
+            //            if (millis() - lastSComTime > SlaveResetTimeOut) {
+            //
+            //              //No Communication for (SlaveResetTimeOut) ms
+            //              slaveWorking = false;
+            //
+            //              if (!slaveWorking) {
+            //                digitalWrite(SlaveReset, LOW);
+            //                delay(50);
+            //                digitalWrite(SlaveReset, HIGH);
+            //                SlaveResets++;
+            //                //delay(3000);
+            //                //Wire.beginTransmission(8); // transmit to device #8
+            //                //Wire.write("Reset");   // sends String
+            //                //Wire.endTransmission();    // stop transmitting
+            //
+            //                Serial.println("Slave Reset");
+            //              }
+            //            } else {
+            Serial.print("No Reply From Slave for ");
+            Serial.print((millis() - lastSComTime) / 1000.0);
+            Serial.println(" seconds");
+            //            }
           }
         }
       }
+      //Eclipse Detection
+      if (getTotalSolarCurrent() < EclipseAmp_Threshold) {
+        masterStatusHolder.State = ECLIPSE;
+        eclipseEntry = millis();
+      }
+      //Low Power Detection
+      if (masterStatusHolder.Battery * 2 < LV_Threshold) {
+        masterStatusHolder.State = LOW_POWER;
+        lowPowerEntry = millis();
+      }
+
       break;
 
     case (DORMANT_CRUISE):
       //30 min Dormant Cruise
       if (millis() > cruiseEnd) {
         masterStatusHolder.State = INITALIZATION;
+        initEntry = millis();
       } else {
         delay(10000);
       }
@@ -791,6 +846,8 @@ void loop() {
       //Listen to Status Reports
       //Check battery ->> INIT_SLEEP
       //Attempt Downlink
+
+
       break;
 
     case (INIT_SLEEP):
@@ -802,6 +859,13 @@ void loop() {
       //Check Battery
       //Check Solar Current
       //Check Time
+
+      if (getTotalSolarCurrent() > .1 || millis()-eclipseEntry > forceExitEclipseTime) {
+        masterStatusHolder.State = NORMAL_OPS;
+        normOpEntry = millis();
+      } else {
+        delay(10000);
+      }
       break;
 
     case (DEPLOY_ARMED):
@@ -823,9 +887,11 @@ void loop() {
       break;
 
     case (LOW_POWER):
-      //Check battery
-      //Check Solar Currents
-      //Check Time
+      if (masterStatusHolder.Battery * 2 >= HV_Threshold) {
+        masterStatusHolder.State = NORMAL_OPS;
+      } else {
+        delay(10000);
+      }
       break;
 
     case (SAFE_MODE):
