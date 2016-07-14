@@ -904,23 +904,24 @@ void loop() {
 
     case (DEPLOY_ARMED):
       sendSCommand(char data[61,1!])  //Prep Camera
-      float IMU[360] //memory to measure once a sec for 6 min
-      float LIGHT
-      digitalWrite(24,HIGH) //Activate Nichrome
-      if (DoorSens == HIGH);
-        digitalWrite(24,LOW) //Wait for DoorSensor
-        
+      float IMU[360]; //memory to measure once a sec for 6 min
+      float LIGHT [24]; //memory to measure light every 30 seconds
+      digitalWrite(24,HIGH); //Activate Nichrome
+      if (DoorSens == LOW);//Wait for DoorSensor
+        sendSCommand() //Trigger Camera
+        digitalWrite(24,LOW); 
       else 
-        delay(360000) 
-        digitalWrite(24,LOW)
+        delay(360000);
+        digitalWrite(24,LOW);
       break;
 
     case (DEPLOY_VERIF):
-      if (LightSens ==  )
+      SlaveResponse = requestFromSlave();
+      buildBuffer(SlaveResponse);
+      if (LightSens > " " ) //LightSensor Trigger
         Serial.print ("LIGHT SENSOR TRIGGERED") 
       else
        Serial.print ("LIGHT SENSOR NOT TRIGGERED") 
-      //LightSensor Trigger
       //Image Capture
       //IMU Capture
       break;
