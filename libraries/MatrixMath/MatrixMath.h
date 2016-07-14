@@ -19,6 +19,7 @@ class MatrixMath
 {
 public:
     //MatrixMath();
+    void printBignum (BigNumber n);
     void Print(float* A, int m, int n, String label);
     void Copy(float* A, int n, int m, float* B);
     void Multiply(float* A, float* B, int m, int p, int n, float* C);
