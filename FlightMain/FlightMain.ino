@@ -3,6 +3,7 @@
 #include <Adafruit_Sensor.h>
 #include <Wire.h>
 
+
 //State Machine Definition
 #define DORMANT_CRUISE 1
 #define INITALIZATION  2
@@ -32,12 +33,17 @@ unsigned long lowPowerEntry;
 unsigned long normOpEntry;
 unsigned long initEntry;
 unsigned long initSleepEntry;
-unsigned long forceExitEclipseTime = 50*60*1000;
-unsigned long forceLPEclipseTime = 180*60*1000;
+unsigned long forceExitEclipseTime = 50 * 60 * 1000;
+unsigned long forceLPEclipseTime = 180 * 60 * 1000;
 float LV_Threshold = 3.2;
 float HV_Threshold = 3.8;
 float EclipseAmp_Threshold = 0.01;
+int LT_Threshold = -10; //C
+int HT_Threshold = 60; //C
 
+//RockBlock Test
+unsigned long lastRBCheck = 0;
+long RBCheckTime = 5 * 60 * 1000;
 
 //IMU and Sensor Test
 bool SensorFetch = false;
@@ -55,6 +61,11 @@ long lastSComAttempt = 0;
 int SComTime = 10;
 long SlaveResetTimeOut = 30 * 1000;
 int slaveDataSize = 100;
+
+//ADCS Test
+unsigned long LastSpinCheckT = 0;
+long SpinCheckTime = 5 * 60 * 1000;
+float OmegaThreshold = 30; //Degrees per second
 
 //Serial Command Test
 int popTime = 4000;
@@ -131,16 +142,7 @@ class floatTuple
 
 //IMU Code
 
-//void configureSensor()
-//{
-//  //set magnetometer range to +-2 gauss
-//  masterStatusHolder.imu.setupMag(imu.LSM9DS0_MAGGAIN_2GAUSS);
-//  //set gyro range to +-245 degrees per second
-//  masterStatusHolder.imu.setupGyro(imu.LSM9DS0_GYROSCALE_245DPS);
-//}
-
-floatTuple getMagData(Adafruit_LSM9DS0 imu, int wT)
-{
+floatTuple getMagData(Adafruit_LSM9DS0 imu, int wT) {
   int k = 0;
   int sumx = 0;
   int sumy = 0;
@@ -157,8 +159,7 @@ floatTuple getMagData(Adafruit_LSM9DS0 imu, int wT)
   return mData;
 }
 
-floatTuple getGyroData(Adafruit_LSM9DS0 imu, int wT)
-{
+floatTuple getGyroData(Adafruit_LSM9DS0 imu, int wT) {
   int k = 0;
   int sumx = 0;
   int sumy = 0;
@@ -175,8 +176,7 @@ floatTuple getGyroData(Adafruit_LSM9DS0 imu, int wT)
   return gData;
 }
 
-int getImuTempData(Adafruit_LSM9DS0 imu, int wT)
-{
+int getImuTempData(Adafruit_LSM9DS0 imu, int wT) {
   int k = 0;
   int sum = 0;
   long endTime = millis() + long(wT);
@@ -220,8 +220,7 @@ class commandBuffer {
 };
 commandBuffer cBuf;
 
-class masterStatus
-{
+class masterStatus {
   public:
     Adafruit_LSM9DS0 imu;
 
@@ -244,11 +243,21 @@ class masterStatus
     int SlaveWorking;
     int Resets;
 
+    bool ADCS_Active;
+    int MResets;
+    int CurXDir; //-1 or 1 for Coil Current Direction
+    int CurXPWM; // 0 to 255 for Coil Current Level
+    int CurYDir; //-1 or 1 for Coil Current Direction
+    int CurYPWM; // 0 to 255 for Coil Current Level
+    int CurZDir; //-1 or 1 for Coil Current Direction
+    int CurZPWM; // 0 to 255 for Coil Current Level
+
 
     masterStatus(int S = NORMAL_OPS, floatTuple g = floatTuple(0, 0, 0) , floatTuple M = floatTuple(0, 0, 0), int IT = 0,
                  float B = 0, float SolarXP = 0, float SolarXM = 0, float SolarYP = 0, float SolarYM = 0,
                  float SolarZP = 0, float SolarZM = 0, int DS = 0, float LS = 0,
-                 float AT = 0, int nP = 0, bool IMUW = true, bool SW = true, int R = 0) {
+                 float AT = 0, int nP = 0, bool IMUW = true, bool SW = true, int R = 0, int MR = 0,
+                 int XD = 0, int XP = 0, int YD = 0, int YP = 0, int ZD = 0, int ZP = 0, bool ADCS = false) {
 
       State = S;
       imu = Adafruit_LSM9DS0();
@@ -269,6 +278,15 @@ class masterStatus
       IMUWorking = IMUW;
       SlaveWorking = SW;
       Resets = R;
+
+      ADCS_Active = ADCS;
+      MResets = MR;
+      CurXDir = XD;
+      CurXPWM = XP;
+      CurYDir = YD;
+      CurYPWM = YP;
+      CurZDir = ZD;
+      CurZPWM = ZP;
     }
     void updateSensors(int wT) {
       if (imuWorking) {
@@ -300,7 +318,7 @@ class masterStatus
       //Produces JSON Output in ASCII  for Downlink
       String output = "";
       output += "{";
-      output += "S:" + String(State)+",";
+      output += "S:" + String(State) + ",";
       output += "GX:" + String(Gyro[0]) + ",GY:" + String(Gyro[1]) + ",GZ:" + String(Gyro[2]) + ",";
       output += "MX:" + String(Mag[0]) + ",MY:" + String(Mag[1]) + ",MZ:" + String(Mag[2]) + ",";
       output += "IT:" + String(ImuTemp) + ",";
@@ -317,7 +335,7 @@ class masterStatus
       return output;
     }
 };
-masterStatus masterStatusHolder = masterStatus();
+masterStatus masterStatusHolder;
 
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -396,13 +414,17 @@ float getCurrentAmp(int panel) {
   return current;
 }
 
-float getTotalSolarCurrent() {
-  float total = 0;
-  for (int i = 1; i <= 6; i++) {
-    total = getCurrentAmp(i);
+
+float getTotalAmperage () {
+  //Check the amps from each solar panel and returns total amperage
+  float TotalCurrent = 0;
+  for (int i = 1 ; i <= 6; i++) {
+    TotalCurrent += getCurrentAmp(i);
   }
-  return total;
+  return TotalCurrent;
 }
+
+
 
 //Determine Remaining RAM
 extern "C" char *sbrk(int i);
@@ -417,8 +439,7 @@ int freeRam () {
 
 ////Parser Functions
 
-void buildBuffer(String com)
-{
+void buildBuffer(String com) {
   int commandData;
   int commandType;
   String comRemaining = com;
@@ -508,39 +529,71 @@ boolean isInputValid(String input) {
   return valid;
 }
 
-void popCommand() {
-  //Process an Incoming Command
-  Serial.println ("Executing Command:");
-  if (cBuf.openSpot > 0) {
-    Serial.println (cBuf.openSpot - 1);
-    int currentCommand[2] = {cBuf.commandStack[cBuf.openSpot - 1][0], cBuf.commandStack[cBuf.openSpot - 1][1]};
-    Serial.print(currentCommand[0]);
-    Serial.print(":");
-    Serial.println(currentCommand[1]);
-    cBuf.commandStack[cBuf.openSpot - 1][0] = -1;
-    cBuf.commandStack[cBuf.openSpot - 1][1] = -1;
-    cBuf.openSpot --;
-    //Place the Command ID in the "#"
-    switch (currentCommand[1]) {
-      case (11):
-        deployTimeOut = (currentCommand[2]);
-        break;
-      case (12):
-        manualTimeout = (currentCommand[2]);
-        break;
-    }
+void popCommands() {
+  //Process All the Incoming Commands
+  while (cBuf.openSpot > 0) { //Manual Timeout
+    Serial.println ("Executing Command:");
+    if (cBuf.openSpot > 0) {
+      Serial.println (cBuf.openSpot - 1);
+      int currentCommand[2] = {cBuf.commandStack[cBuf.openSpot - 1][0], cBuf.commandStack[cBuf.openSpot - 1][1]};
+      Serial.print(currentCommand[0]);
+      Serial.print(":");
+      Serial.println(currentCommand[1]);
+      cBuf.commandStack[cBuf.openSpot - 1][0] = -1;
+      cBuf.commandStack[cBuf.openSpot - 1][1] = -1;
+      cBuf.openSpot --;
+      //Place the Command ID in the "#"
 
-  } else {
-    Serial.println("No Command");
+      //Commands
+      switch (currentCommand[1]) {
+        case (11):
+          deployTimeOut = (currentCommand[2]);
+          break;
+        case (12):
+          manualTimeout = (currentCommand[2]);
+          break;
+        case (61):
+          masterStatusHolder.MResets = (currentCommand[2]);
+          break;
+        case (62):
+          masterStatusHolder.AnalogTemp = (currentCommand[2]);
+          break;
+        case (63):
+          masterStatusHolder.LightSense = (currentCommand[2]);
+          break;
+        case (64):
+          masterStatusHolder.CurXDir = (currentCommand[2]);
+          break;
+        case (65):
+          masterStatusHolder.CurYDir = (currentCommand[2]);
+          break;
+        case (66):
+          masterStatusHolder.CurZDir = (currentCommand[2]);
+          break;
+        case (67):
+          masterStatusHolder.CurXPWM = (currentCommand[2]);
+          break;
+        case (68):
+          masterStatusHolder.CurYPWM = (currentCommand[2]);
+          break;
+        case (69):
+          masterStatusHolder.CurZPWM = (currentCommand[2]);
+          break;
+        case (610):
+          masterStatusHolder.numPhotos = (currentCommand[2]);
+          break;
+      }
+
+    } else {
+      //Serial.println("No Command");
+    }
   }
 }
 
 void readSerialAdd2Buffer() {
   //Modify for RB Communication
-
-
   if (Serial.available() > 0) {
-    Serial.println("Recieving Command");
+    //Serial.println("Recieving Command");
     String comString = "";
     while (Serial.available() > 0) {
       // get the new byte:
@@ -549,11 +602,11 @@ void readSerialAdd2Buffer() {
       comString += inChar;
     }
     if (isInputValid(comString)) {
-      Serial.println("Command is Valid");
+      //Serial.println("Command is Valid");
       buildBuffer(comString);
-      Serial.println("Built Command Buffer Successfully");
+      popCommands();
     } else {
-      Serial.println("Invalid Command");
+      //Serial.println("Invalid Command");
     }
   }
 }
@@ -562,7 +615,7 @@ void readSerialAdd2Buffer() {
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-//Slave Command Functions
+//Slave Functions
 
 /* Supported Commands
   Send Gyro X to Slave: "11,<(String)(float)>!"
@@ -611,6 +664,13 @@ String buildIMUDataCommand() {
   return res;
 }
 
+void sendIMUToSLave() {
+  String SCommand = buildIMUDataCommand();
+  char SComCharA[SCommand.length()];
+  SCommand.toCharArray(SComCharA, SCommand.length());
+  sendSCommand(SComCharA);
+}
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -618,34 +678,17 @@ String buildIMUDataCommand() {
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 // RockBlock Uplink/Downlink Functions
-//      Most stored in IridiumSBD Library
 //
-//bool ISBDCallback()
-//{
-//  unsigned ledOn = (bool)((millis() / 200) % 2);
-//  digitalWrite(13, ledOn); // Blink LED every 1/5 second
-//  //Wire.println("31.200!"); //Test Data by relaying Through Slave
-//
-//  if (SBDCallBackStartTime + RBForcedTimeout > millis()) {
-//    return false;
-//  } else {
-//    return true;
-//  }
-//}
-
-
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
 
 /*  Watchdog timer support for Arduino Zero
     by Richard Hole  December 19, 2015
 */
 
 //setupWDT( 11 );
-
 
 static void   WDTsync() {
   while (WDT->STATUS.bit.SYNCBUSY == 1); //Just wait till WDT is free
@@ -698,9 +741,7 @@ void setup()
   //pinMode(12, INPUT_PULLUP);
   //attachInterrupt(digitalPinToInterrupt(12), forceSerialOff, LOW);
   //attachInterrupt(digitalPinToInterrupt(9), sendCommandToSlave, LOW);
-  for (int i = 0 ; i < 10; i++) {
-    Serial.println("Here1");
-  }
+
   //Try to initialize and warn if we couldn't detect the chip
   int endT = millis() + manualTimeout;
 
@@ -710,32 +751,30 @@ void setup()
 
 
   cBuf = commandBuffer();
+  masterStatusHolder = masterStatus();
 
   masterStatusHolder.configureSensor(); //runs configureSensor function
   //pinMode(A3, INPUT); //Temperature Sensor
   Wire.begin(); //Start i2c as master
 
-  for (int i = 0 ; i < 10; i++) {
-    Serial.println("Here");
-  }
+  //  for (int i = 0 ; i < 10; i++) {
+  //    Serial.println("Finished Setup");
+  //  }
 }
 
 void loop() {
-
-
   switch (masterStatusHolder.State) {
     case (NORMAL_OPS):
 
       //Collect Sensor Data
-      if (SensorFetch) {
-        masterStatusHolder.updateSensors(imuSensorDwell);
-        //Request Light/Temp Data From Slave
-      }
-
-      //readSerialAdd2Buffer();
-      //if (millis() - lastPopTime >= popTime) {
-      //  popCommand();
+      //if (SensorFetch) {
+      masterStatusHolder.updateSensors(imuSensorDwell);
+      //Request Light/Temp Data From Slave
       //}
+
+      if (millis() - lastRBCheck >= RBCheckTime) {
+        //Do RockBlock Stuff
+      }
 
       //Blinker for Testing
       if (millis() - ledLastTime >= 300) {
@@ -766,24 +805,18 @@ void loop() {
       if (TestSCom) {
         if (millis() - lastSComAttempt >= SComTime || commandedSC) {
           lastSComAttempt = millis();
-          //Serial.print("Slave Status Report: "); //Stalls here with ?
-
-          String SCommand = buildIMUDataCommand();
-          int l = SCommand.length();
-          char SComCharA[l];
-          SCommand.toCharArray(SComCharA, l);
-          sendSCommand(SComCharA);
+          //Serial.print("Slave Status Report: "); //Stalls here with Wire?
+          sendIMUToSLave();
           String SlaveResponse = requestFromSlave();
-          Serial.println(SlaveResponse);
 
           if (!SlaveResponse.equals("")) {
             lastSComTime = millis(); //Reset Timeout if Com is successful
-
-            //Valid Reply From Slave:
-
-            //SlaveParser
-
-            Serial.println("Valid Reply");
+            if (isInputValid(SlaveResponse)) {
+              //Serial.println(Valid Reply From Slave);
+              buildBuffer(SlaveResponse);
+            } else {
+              //Serial.println("Invalid Response");
+            }
           } else {
             //No Reply From Slave
             //            if (millis() - lastSComTime > SlaveResetTimeOut) {
@@ -796,11 +829,7 @@ void loop() {
             //                delay(50);
             //                digitalWrite(SlaveReset, HIGH);
             //                SlaveResets++;
-            //                //delay(3000);
-            //                //Wire.beginTransmission(8); // transmit to device #8
-            //                //Wire.write("Reset");   // sends String
-            //                //Wire.endTransmission();    // stop transmitting
-            //
+            //                //delay(1000);
             //                Serial.println("Slave Reset");
             //              }
             //            } else {
@@ -811,8 +840,20 @@ void loop() {
           }
         }
       }
+      //ADCS
+      if (millis() - LastSpinCheckT > SpinCheckTime) {
+        float spinMagnitude = 0;
+        for (int i = 0; i < 3; i++) {
+          spinMagnitude = pow(masterStatusHolder.Gyro[i], 2);
+        }
+        spinMagnitude = sqrt(spinMagnitude);
+        if (spinMagnitude > OmegaThreshold){
+          
+        }
+      }
+
       //Eclipse Detection
-      if (getTotalSolarCurrent() < EclipseAmp_Threshold) {
+      if (getTotalAmperage() < EclipseAmp_Threshold) {
         masterStatusHolder.State = ECLIPSE;
         eclipseEntry = millis();
       }
@@ -838,7 +879,7 @@ void loop() {
       //Initiate Detumble "41,1!"
       //Listen to Status Reports
       //Check battery ->> INIT_SLEEP
-      //Attempt Downlink
+      //Attempt Downlink after 45min
 
 
       break;
@@ -853,7 +894,7 @@ void loop() {
       //Check Solar Current
       //Check Time
 
-      if (getTotalSolarCurrent() > .1 || millis()-eclipseEntry > forceExitEclipseTime) {
+      if (getTotalAmperage() > .1 || millis() - eclipseEntry > forceExitEclipseTime) {
         masterStatusHolder.State = NORMAL_OPS;
         normOpEntry = millis();
       } else {
@@ -890,6 +931,7 @@ void loop() {
       break;
 
     case (LOW_POWER):
+      masterStatusHolder.updateSensors(imuSensorDwell);
       if (masterStatusHolder.Battery * 2 >= HV_Threshold) {
         masterStatusHolder.State = NORMAL_OPS;
       } else {
