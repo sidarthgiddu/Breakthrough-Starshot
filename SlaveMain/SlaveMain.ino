@@ -222,11 +222,11 @@ void runADCS(double* Magfield, double* omega, BigNumber Kp, BigNumber Kd) {
   //Matrix.Print((BigNumber*) gyroData, 3, 1, "gyrodata");
   //Matrix.Print((BigNumber*) Bvalues, 3, 1, "gyrodata");
 
-  BigNumber J[9] = {0, Bvalues[2], -Bvalues[1], -Bvalues[2], 0, Bvalues[0], Bvalues[1], -Bvalues[0], 0};
+  BigNumber J[9] = {0, Bvalues[2], BigNumber("-1")*Bvalues[1], BigNumber("-1")*Bvalues[2], 0, Bvalues[0], Bvalues[1], BigNumber("-1")*Bvalues[0], 0};
 
-  Serial.print("Jacobian");
+  Serial.println("Jacobian");
   for (int i = 0; i < 9; i++) {
-    printBignum (J[i]); Serial.println(" ");
+    printBignum (J[i]); Serial.print(" ");
   }
 
   Matrix.Copy((BigNumber*)Bvalues, 1, 3, (BigNumber*)Bfield); // create new field to scale for the pseudo-inverse
