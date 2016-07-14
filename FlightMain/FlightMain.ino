@@ -15,6 +15,7 @@
 #define DEPLOY_DOWN_LK 8
 #define LOW_POWER      9
 #define SAFE_MODE     10
+#define esdfg     11
 
 ////Constant Initialization
 unsigned long cruiseEnd = 30 * 60 * 1000;
@@ -819,7 +820,7 @@ void loop() {
         }
       }
       //Eclipse Detection
-      if (getTotalSolarCurrent() < EclipseAmp_Threshold) {
+      if (getTotalAmperage() < EclipseAmp_Threshold) {
         masterStatusHolder.State = ECLIPSE;
         eclipseEntry = millis();
       }
@@ -860,7 +861,7 @@ void loop() {
       //Check Solar Current
       //Check Time
 
-      if (getTotalSolarCurrent() > .1 || millis()-eclipseEntry > forceExitEclipseTime) {
+      if (getTotalAmperage() > .1 || millis()-eclipseEntry > forceExitEclipseTime) {
         masterStatusHolder.State = NORMAL_OPS;
         normOpEntry = millis();
       } else {
