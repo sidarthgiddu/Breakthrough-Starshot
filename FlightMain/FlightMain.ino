@@ -1,7 +1,8 @@
+
 #include <Adafruit_LSM9DS0.h>
 #include <Adafruit_Sensor.h>
 #include <Wire.h>
-#include <IridiumSBD.h> //IT WORKS?!?!?!
+//#include <IridiumSBD.h> //IT WORKS?!?!?!
 
 //State Machine Definition
 #define DORMANT_CRUISE 1
@@ -14,6 +15,7 @@
 #define DEPLOY_DOWN_LK 8
 #define LOW_POWER      9
 #define SAFE_MODE     10
+#define esdfg     11
 
 ////Constant Initialization
 unsigned long cruiseEnd = 30 * 60 * 1000;
@@ -32,11 +34,13 @@ unsigned long lowPowerEntry;
 unsigned long normOpEntry;
 unsigned long initEntry;
 unsigned long initSleepEntry;
-unsigned long forceExitEclipseTime = 50*60*1000;
-unsigned long forceLPEclipseTime = 180*60*1000;
+unsigned long forceExitEclipseTime = 50 * 60 * 1000;
+unsigned long forceLPEclipseTime = 180 * 60 * 1000;
 float LV_Threshold = 3.2;
 float HV_Threshold = 3.8;
 float EclipseAmp_Threshold = 0.01;
+int LT_Threshold = -10; //C
+int HT_Threshold = 60; //C
 
 
 //IMU and Sensor Test
@@ -61,7 +65,7 @@ int popTime = 4000;
 long lastPopTime = 0;
 
 //RockBlock Test
-IridiumSBD iSBD = IridiumSBD(Serial, 22); //RBSleep Pin
+//IridiumSBD iSBD = IridiumSBD(Serial, 22); //RBSleep Pin
 long SBDCallBackStartTime = 0;
 long RBForcedTimeout = 30 * 1000;
 
@@ -244,11 +248,20 @@ class masterStatus
     int SlaveWorking;
     int Resets;
 
+    int MResets;
+    int CurXDir; //-1 or 1 for Coil Current Direction
+    int CurXPWM; // 0 to 255 for Coil Current Level
+    int CurYDir; //-1 or 1 for Coil Current Direction
+    int CurYPWM; // 0 to 255 for Coil Current Level
+    int CurZDir; //-1 or 1 for Coil Current Direction
+    int CurZPWM; // 0 to 255 for Coil Current Level
+
 
     masterStatus(int S = NORMAL_OPS, floatTuple g = floatTuple(0, 0, 0) , floatTuple M = floatTuple(0, 0, 0), int IT = 0,
                  float B = 0, float SolarXP = 0, float SolarXM = 0, float SolarYP = 0, float SolarYM = 0,
                  float SolarZP = 0, float SolarZM = 0, int DS = 0, float LS = 0,
-                 float AT = 0, int nP = 0, bool IMUW = true, bool SW = true, int R = 0) {
+                 float AT = 0, int nP = 0, bool IMUW = true, bool SW = true, int R = 0, int MR = 0,
+                 int XD = 0, int XP = 0, int YD = 0, int YP = 0, int ZD = 0, int ZP = 0) {
 
       State = S;
       imu = Adafruit_LSM9DS0();
@@ -269,6 +282,14 @@ class masterStatus
       IMUWorking = IMUW;
       SlaveWorking = SW;
       Resets = R;
+
+      MResets = MR;
+      CurXDir = XD;
+      CurXPWM = XP;
+      CurYDir = YD;
+      CurYPWM = YP;
+      CurZDir = ZD;
+      CurZPWM = ZP;
     }
     void updateSensors(int wT) {
       if (imuWorking) {
@@ -300,7 +321,7 @@ class masterStatus
       //Produces JSON Output in ASCII  for Downlink
       String output = "";
       output += "{";
-      output += "S:" + String(State)+",";
+      output += "S:" + String(State) + ",";
       output += "GX:" + String(Gyro[0]) + ",GY:" + String(Gyro[1]) + ",GZ:" + String(Gyro[2]) + ",";
       output += "MX:" + String(Mag[0]) + ",MY:" + String(Mag[1]) + ",MZ:" + String(Mag[2]) + ",";
       output += "IT:" + String(ImuTemp) + ",";
@@ -317,7 +338,7 @@ class masterStatus
       return output;
     }
 };
-masterStatus masterStatusHolder = masterStatus();
+masterStatus masterStatusHolder;
 
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -396,13 +417,17 @@ float getCurrentAmp(int panel) {
   return current;
 }
 
-float getTotalSolarCurrent() {
-  float total = 0;
-  for (int i = 1; i <= 6; i++) {
-    total = getCurrentAmp(i);
+
+float getTotalAmperage () {
+  //Check the amps from each solar panel and returns total amperage
+  float TotalCurrent = 0;
+  for (int i = 1 ; i <= 6; i++) {
+    TotalCurrent += getCurrentAmp(i);
   }
-  return total;
+  return TotalCurrent;
 }
+
+
 
 //Determine Remaining RAM
 extern "C" char *sbrk(int i);
@@ -509,29 +534,63 @@ boolean isInputValid(String input) {
 }
 
 void popCommand() {
-  //Process an Incoming Command
-  Serial.println ("Executing Command:");
-  if (cBuf.openSpot > 0) {
-    Serial.println (cBuf.openSpot - 1);
-    int currentCommand[2] = {cBuf.commandStack[cBuf.openSpot - 1][0], cBuf.commandStack[cBuf.openSpot - 1][1]};
-    Serial.print(currentCommand[0]);
-    Serial.print(":");
-    Serial.println(currentCommand[1]);
-    cBuf.commandStack[cBuf.openSpot - 1][0] = -1;
-    cBuf.commandStack[cBuf.openSpot - 1][1] = -1;
-    cBuf.openSpot --;
-    //Place the Command ID in the "#"
-    switch (currentCommand[1]) {
-      case (11):
-        deployTimeOut = (currentCommand[2]);
-        break;
-      case (12):
-        manualTimeout = (currentCommand[2]);
-        break;
-    }
+  //Process All the Incoming Commands
+  while (cBuf.openSpot > 0) { //Manual Timeout
+    Serial.println ("Executing Command:");
+    if (cBuf.openSpot > 0) {
+      Serial.println (cBuf.openSpot - 1);
+      int currentCommand[2] = {cBuf.commandStack[cBuf.openSpot - 1][0], cBuf.commandStack[cBuf.openSpot - 1][1]};
+      Serial.print(currentCommand[0]);
+      Serial.print(":");
+      Serial.println(currentCommand[1]);
+      cBuf.commandStack[cBuf.openSpot - 1][0] = -1;
+      cBuf.commandStack[cBuf.openSpot - 1][1] = -1;
+      cBuf.openSpot --;
+      //Place the Command ID in the "#"
 
-  } else {
-    Serial.println("No Command");
+      //Commands
+      switch (currentCommand[1]) {
+        case (11):
+          deployTimeOut = (currentCommand[2]);
+          break;
+        case (12):
+          manualTimeout = (currentCommand[2]);
+          break;
+        case (61):
+          masterStatusHolder.MResets = (currentCommand[2]);
+          break;
+        case (62):
+          masterStatusHolder.AnalogTemp = (currentCommand[2]);
+          break;
+        case (63):
+          masterStatusHolder.LightSense = (currentCommand[2]);
+          break;
+        case (64):
+          masterStatusHolder.CurXDir = (currentCommand[2]);
+          break;
+        case (65):
+          masterStatusHolder.CurYDir = (currentCommand[2]);
+          break;
+        case (66):
+          masterStatusHolder.CurZDir = (currentCommand[2]);
+          break;
+        case (67):
+          masterStatusHolder.CurXPWM = (currentCommand[2]);
+          break;
+        case (68):
+          masterStatusHolder.CurYPWM = (currentCommand[2]);
+          break;
+        case (69):
+          masterStatusHolder.CurZPWM = (currentCommand[2]);
+          break;
+          case (610):
+          masterStatusHolder.numPhotos = (currentCommand[2]);
+          break;
+      }
+
+    } else {
+      Serial.println("No Command");
+    }
   }
 }
 
@@ -609,6 +668,10 @@ String buildIMUDataCommand() {
   res += "22," + String(masterStatusHolder.Mag[1]) + "!";
   res += "23," + String(masterStatusHolder.Mag[2]) + "!";
   return res;
+}
+
+void slaveParser(String input) {
+
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -698,9 +761,7 @@ void setup()
   //pinMode(12, INPUT_PULLUP);
   //attachInterrupt(digitalPinToInterrupt(12), forceSerialOff, LOW);
   //attachInterrupt(digitalPinToInterrupt(9), sendCommandToSlave, LOW);
-  for (int i = 0 ; i < 10; i++) {
-    Serial.println("Here1");
-  }
+
   //Try to initialize and warn if we couldn't detect the chip
   int endT = millis() + manualTimeout;
 
@@ -710,14 +771,15 @@ void setup()
 
 
   cBuf = commandBuffer();
+  masterStatusHolder = masterStatus();
 
   masterStatusHolder.configureSensor(); //runs configureSensor function
   //pinMode(A3, INPUT); //Temperature Sensor
   Wire.begin(); //Start i2c as master
 
-  for (int i = 0 ; i < 10; i++) {
-    Serial.println("Here");
-  }
+  //  for (int i = 0 ; i < 10; i++) {
+  //    Serial.println("Finished Setup");
+  //  }
 }
 
 void loop() {
@@ -727,10 +789,10 @@ void loop() {
     case (NORMAL_OPS):
 
       //Collect Sensor Data
-      if (SensorFetch) {
-        masterStatusHolder.updateSensors(imuSensorDwell);
-        //Request Light/Temp Data From Slave
-      }
+      //if (SensorFetch) {
+      masterStatusHolder.updateSensors(imuSensorDwell);
+      //Request Light/Temp Data From Slave
+      //}
 
       //readSerialAdd2Buffer();
       //if (millis() - lastPopTime >= popTime) {
@@ -778,7 +840,9 @@ void loop() {
 
           if (!SlaveResponse.equals("")) {
             lastSComTime = millis(); //Reset Timeout if Com is successful
-
+            if (isInputValid(SlaveResponse)) {
+              buildBuffer(SlaveResponse);
+            }
             //Valid Reply From Slave:
 
             //SlaveParser
@@ -812,7 +876,7 @@ void loop() {
         }
       }
       //Eclipse Detection
-      if (getTotalSolarCurrent() < EclipseAmp_Threshold) {
+      if (getTotalAmperage() < EclipseAmp_Threshold) {
         masterStatusHolder.State = ECLIPSE;
         eclipseEntry = millis();
       }
@@ -838,7 +902,7 @@ void loop() {
       //Initiate Detumble "41,1!"
       //Listen to Status Reports
       //Check battery ->> INIT_SLEEP
-      //Attempt Downlink
+      //Attempt Downlink after 45min
 
 
       break;
@@ -853,7 +917,7 @@ void loop() {
       //Check Solar Current
       //Check Time
 
-      if (getTotalSolarCurrent() > .1 || millis()-eclipseEntry > forceExitEclipseTime) {
+      if (getTotalAmperage() > .1 || millis() - eclipseEntry > forceExitEclipseTime) {
         masterStatusHolder.State = NORMAL_OPS;
         normOpEntry = millis();
       } else {
@@ -880,6 +944,7 @@ void loop() {
       break;
 
     case (LOW_POWER):
+      masterStatusHolder.updateSensors(imuSensorDwell);
       if (masterStatusHolder.Battery * 2 >= HV_Threshold) {
         masterStatusHolder.State = NORMAL_OPS;
       } else {
