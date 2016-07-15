@@ -894,7 +894,9 @@ void loop() {
       break;
 
     case (ECLIPSE):
-      //Check Battery
+    //Check Battery 
+    if (masterStatusHolder.Battery < LV_Threshold) {
+        masterStatusHolder.State = LOW_POWER;
       //Check Solar Current
       //Check Time
 
@@ -914,17 +916,19 @@ void loop() {
       digitalWrite(24,HIGH); //Activate Nichrome
       bool DoorOpen = false
       for (int j=0; j<Acceldata,length (), j++) //Wait for DoorSensor, check for spikes in accelerometer
-        if Acceldata[j] > "" || (DoorSens == LOW);
+        if Acceldata[j] > "" || (DoorSens == LOW){
         DoorOpen=true;
         sendSCommand() ;//Trigger Camera
         masterStatusHolder.DoorSense == 1;
         digitalWrite(24,LOW); 
+        }
         break
-      else 
-      delay(60000) //wait one minute
-      sendSCommand() ;// if nothing happens in one minute Trigger Camera
-      delay(360000); //wait another 6 minutes until disabling door trigger
-      digitalWrite(24,LOW);
+        else {
+        delay(60000) //wait one minute
+        sendSCommand() ;// if nothing happens in one minute Trigger Camera
+        delay(360000); //wait another 6 minutes until disabling door trigger
+        digitalWrite(24,LOW);
+        }
       break;
 
     case (DEPLOY_VERIF):
