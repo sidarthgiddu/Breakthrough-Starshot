@@ -890,14 +890,13 @@ void loop() {
         masterStatusHolder.State = INIT_SLEEP;
         break
       }
-      if millis()-EnterINITIALIZATION>2700000{
+      if (millis()-EnterINITIALIZATION > 2700000){
         //call downlink function
       break;
       }
 
     case (INIT_SLEEP):
       //Check Time
-      
       //Check battery ->> INITALIZATION
       if (masterStatusHolder.Battery > HV_Threshold){
         masterStatusHolder.State=INITIALIZATION;
