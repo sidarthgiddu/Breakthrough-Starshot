@@ -917,6 +917,7 @@ void loop() {
         if Acceldata[j] > "" || (DoorSens == LOW);
         DoorOpen=true;
         sendSCommand() ;//Trigger Camera
+        masterStatusHolder.DoorSense == 1;
         digitalWrite(24,LOW); 
         break
       else 
@@ -931,6 +932,7 @@ void loop() {
       if (LightSens > " " ) //LightSensor Trigger
         masterStatusHolder.PayloadDeployed == true;  
       else
+        masterStatusHolder.PayloadDeployed == false; 
       break;
 
     case (DEPLOY_DOWN_LK):
