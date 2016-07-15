@@ -193,7 +193,7 @@ BigNumber Inertia[3][3] = {{mass / six, zero, zero},
 BigNumber E = "0.0001";
 
 void runADCS(double* Magfield, double* omega, BigNumber Kp, BigNumber Kd) {
-
+  BigNumber::setScale (20);
   String sx = String(omega[0], 12);
   String sy = String(omega[1], 12);
   String sz = String(omega[2], 12);
@@ -224,12 +224,8 @@ void runADCS(double* Magfield, double* omega, BigNumber Kp, BigNumber Kd) {
 
   BigNumber J[9] = {0, Bvalues[2], BigNumber("-1")*Bvalues[1], BigNumber("-1")*Bvalues[2], 0, Bvalues[0], Bvalues[1], BigNumber("-1")*Bvalues[0], 0};
 
-  Serial.println("Jacobian");
-  for (int i = 0; i < 9; i++) {
-    printBignum (J[i]); Serial.print(" ");
-  }
-
   Matrix.Copy((BigNumber*)Bvalues, 1, 3, (BigNumber*)Bfield); // create new field to scale for the pseudo-inverse
+  Matrix.Print((BigNumber*) Bfield, 3, 1, "Copy");
   Matrix.Scale((BigNumber*)Bfield, 3, 1, E); // scale duplicated Bfield array with E for pseudo-inverse
 
   BigNumber Jnew[4][3] = {{J[0], J[1], J[2]},
@@ -238,7 +234,7 @@ void runADCS(double* Magfield, double* omega, BigNumber Kp, BigNumber Kd) {
     {Bfield[0]*E, Bfield[1]*E, Bfield[2]*E}
   };
 
-  //Matrix.Print((BigNumber*) Jnew, 4, 3, "check");
+  Matrix.Print((BigNumber*) Jnew, 4, 3, "check");
 
   BigNumber Jtranspose[3][4];
   BigNumber Jproduct[3][3];

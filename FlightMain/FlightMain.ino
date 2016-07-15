@@ -935,11 +935,19 @@ void loop() {
       digitalWrite(24,HIGH); //Activate Nichrome
       bool DoorOpen = false
       for (int j=0; j<Acceldata,length (), j++) //Wait for DoorSensor, check for spikes in accelerometer
-        if Acceldata[j] > "" || (DoorSens == LOW){
+        if Acceldata[j] > "" || (DoorSens == LOW);
         DoorOpen=true;
         sendSCommand() ;//Trigger Camera
         masterStatusHolder.DoorSense == 1;
         digitalWrite(24,LOW); 
+        
+        break
+      else 
+      delay(60000) //wait one minute
+      sendSCommand() ;// if nothing happens in one minute Trigger Camera
+      delay(360000); //wait another 6 minutes until disabling door trigger
+      digitalWrite(24,LOW);
+=======
         MasterStatusHoler.State = DEPLOY_VERIF;
         }
         break
@@ -950,6 +958,7 @@ void loop() {
         digitalWrite(24,LOW);
         MasterStatusHoler.State = DEPLOY_VERIF;
         }
+>>>>>>> c302939f00efa64548dee68ab9704c06592dae13
       break;
 
     case (DEPLOY_VERIF):
