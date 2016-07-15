@@ -881,7 +881,7 @@ void loop() {
 
     case (INITALIZATION):
       EnterINITIALIZATION=millis();
-      //Initiate Detumble "41,1!"???-->"51,1!"
+      //Initiate Detumble "41,1!"-->"51,1!"?
       sendScommand("51,1!");
       //Listen to Status Reports
       if (Gyro[0]< "" && Gyro [1] < "") {
@@ -893,8 +893,9 @@ void loop() {
       }
       if (millis()-EnterINITIALIZATION > 2700000){
         //call downlink function
+        }
       break;
-      }
+      
 
     case (INIT_SLEEP):
       //Check Time
