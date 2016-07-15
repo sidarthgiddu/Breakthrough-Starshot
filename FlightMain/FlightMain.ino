@@ -884,11 +884,12 @@ void loop() {
       //Initiate Detumble "41,1!"???-->"51,1!"
       sendScommand("51,1!");
       //Listen to Status Reports
+      if (Gyro[0]< "" && Gyro [1] < "") {
+        masterStatusHolder.State = NORM_OPS;
+      }
       //Check battery ->> INIT_SLEEP
       if (masterStatusHolder.Battery < LV_Threshold) {
-        EnterINIT_SLEEP=millis();
         masterStatusHolder.State = INIT_SLEEP;
-        break
       }
       if (millis()-EnterINITIALIZATION > 2700000){
         //call downlink function
@@ -897,7 +898,11 @@ void loop() {
 
     case (INIT_SLEEP):
       //Check Time
-      //Check battery ->> INITALIZATION
+      EnterINIT_SLEEP=millis();
+      if (millis()-EnterINIT_SLEEP> ""){
+        masterStatusHolder.State=INITIALIZATION;
+      }
+         //Check battery ->> INITALIZATION
       if (masterStatusHolder.Battery > HV_Threshold){
         masterStatusHolder.State=INITIALIZATION;
       }
