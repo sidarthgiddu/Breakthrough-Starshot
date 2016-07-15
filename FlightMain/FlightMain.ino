@@ -880,25 +880,39 @@ void loop() {
       break;
 
     case (INITALIZATION):
-      //Initiate Detumble "41,1!"
+      EnterINITIALIZATION=millis();
+      //Initiate Detumble "41,1!"???-->"51,1!"
+      sendScommand("51,1!");
       //Listen to Status Reports
       //Check battery ->> INIT_SLEEP
-      //Attempt Downlink after 45min
-
-
+      if (masterStatusHolder.Battery < LV_Threshold) {
+        EnterINIT_SLEEP=millis();
+        masterStatusHolder.State = INIT_SLEEP;
+        break
+      }
+      if millis()-EnterINITIALIZATION>2700000{
+        //call downlink function
       break;
+      }
 
     case (INIT_SLEEP):
       //Check Time
+      
       //Check battery ->> INITALIZATION
+      if (masterStatusHolder.Battery > HV_Threshold){
+        masterStatusHolder.State=INITIALIZATION;
+      }
       break;
 
     case (ECLIPSE):
-    //Check Battery 
-    if (masterStatusHolder.Battery < LV_Threshold) {
-        masterStatusHolder.State = LOW_POWER;
-      //Check Solar Current
-      //Check Time
+      //Check Battery 
+      if (masterStatusHolder.Battery < LV_Threshold) {
+          masterStatusHolder.State = LOW_POWER;
+      }
+        //Check Solar Current
+      float getTotalAmperage[4];
+        //Check Time
+       
 
       if (getTotalAmperage() > .1 || millis() - eclipseEntry > forceExitEclipseTime) {
         masterStatusHolder.State = NORMAL_OPS;
@@ -921,13 +935,15 @@ void loop() {
         sendSCommand() ;//Trigger Camera
         masterStatusHolder.DoorSense == 1;
         digitalWrite(24,LOW); 
+        MasterStatusHoler.State = DEPLOY_VERIF;
         }
         break
         else {
         delay(60000) //wait one minute
-        sendSCommand() ;// if nothing happens in one minute Trigger Camera
+        sendSCommand() ;// if nothing happens in one minute start taking pictures
         delay(360000); //wait another 6 minutes until disabling door trigger
         digitalWrite(24,LOW);
+        MasterStatusHoler.State = DEPLOY_VERIF;
         }
       break;
 
