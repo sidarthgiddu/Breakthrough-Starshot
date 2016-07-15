@@ -22,7 +22,10 @@ void MatrixMath::Print(BigNumber* A, int m, int n, String label){
     Serial.println(label);
     for (i=0; i<m; i++){
         for (j=0;j<n;j++){
-            Serial.print(A[n*i+j],20);
+            //Serial.print(A[n*i+j],20);
+            char * s = A[n*i+j].toString ();
+            Serial.println (s);
+            free (s);
             Serial.print("\t");
         }
         Serial.println();
