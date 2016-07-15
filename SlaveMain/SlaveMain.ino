@@ -278,7 +278,7 @@ void outputPWM(BigNumber* I, int length) {
   float Imax = 0.2;
   String I1 = I[0].toString(); 
   String I2 = I[1].toString(); 
-  String I3 = I[2].toString(); Serial.println(I1.toFloat());
+  String I3 = I[2].toString();
   float If[3] = {I1.toFloat(), I2.toFloat(), I3.toFloat()};
   free (&I[0]);
   free (&I[1]);
