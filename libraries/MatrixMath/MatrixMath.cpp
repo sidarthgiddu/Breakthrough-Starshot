@@ -24,9 +24,12 @@ void MatrixMath::Print(BigNumber* A, int m, int n, String label){
         for (j=0;j<n;j++){
             //Serial.print(A[n*i+j],20);
             char * s = A[n*i+j].toString ();
-            Serial.println (s);
+            Serial.print (s); Serial.print(" ");
             free (s);
-            Serial.print("\t");
+            //Serial.print("\t");
+            //if (((n*i+j)==(n-1))||((n*i+j)==(2*n-1))||((n*i+j)==(3*n-1))){
+            //    Serial.println("");
+            //}
         }
         Serial.println();
     }

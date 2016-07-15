@@ -181,7 +181,7 @@ commandBuffer cBuf;
 
 ////////////////////////////////
 ////////////////////////////////
-////////////////////////////////
+////////////////////////////////========================= ADCS DATA ==========================================================================
 BigNumber mass = "1.33";
 BigNumber zero = 0, six = 6;
 BigNumber Bfield[3];
@@ -190,10 +190,10 @@ BigNumber Inertia[3][3] = {{mass / six, zero, zero},
   {zero, mass / six, zero},
   {zero, zero, mass / six}
 }; // Inertia initialization
-BigNumber E = "0.0001";
+BigNumber E = BigNumber("0.0001");
 
 void runADCS(double* Magfield, double* omega, BigNumber Kp, BigNumber Kd) {
-  BigNumber::setScale (20);
+  //BigNumber::scale_ = 20;
   String sx = String(omega[0], 12);
   String sy = String(omega[1], 12);
   String sz = String(omega[2], 12);
@@ -218,14 +218,10 @@ void runADCS(double* Magfield, double* omega, BigNumber Kp, BigNumber Kd) {
 
   BigNumber gyroData[3] = {BigNumber(om1), BigNumber(om2), BigNumber(om3)};
   BigNumber Bvalues[3] = {BigNumber(bom1), BigNumber(bom2), BigNumber(bom3)};
-
-  //Matrix.Print((BigNumber*) gyroData, 3, 1, "gyrodata");
-  //Matrix.Print((BigNumber*) Bvalues, 3, 1, "gyrodata");
-
+  
   BigNumber J[9] = {0, Bvalues[2], BigNumber("-1")*Bvalues[1], BigNumber("-1")*Bvalues[2], 0, Bvalues[0], Bvalues[1], BigNumber("-1")*Bvalues[0], 0};
 
   Matrix.Copy((BigNumber*)Bvalues, 1, 3, (BigNumber*)Bfield); // create new field to scale for the pseudo-inverse
-  Matrix.Print((BigNumber*) Bfield, 3, 1, "Copy");
   Matrix.Scale((BigNumber*)Bfield, 3, 1, E); // scale duplicated Bfield array with E for pseudo-inverse
 
   BigNumber Jnew[4][3] = {{J[0], J[1], J[2]},
@@ -234,7 +230,7 @@ void runADCS(double* Magfield, double* omega, BigNumber Kp, BigNumber Kd) {
     {Bfield[0]*E, Bfield[1]*E, Bfield[2]*E}
   };
 
-  Matrix.Print((BigNumber*) Jnew, 4, 3, "check");
+  Matrix.Print((BigNumber*) Jnew, 4, 3, "Jnew");
 
   BigNumber Jtranspose[3][4];
   BigNumber Jproduct[3][3];
@@ -242,7 +238,7 @@ void runADCS(double* Magfield, double* omega, BigNumber Kp, BigNumber Kd) {
 
   Matrix.Transpose((BigNumber*)Jnew, 4, 3, (BigNumber*)Jtranspose); // transpose(Jnew)
   Serial.println ("Step 1 complete");
-  Matrix.Print((BigNumber*) Jtranspose, 3, 4, "check");
+  //Matrix.Print((BigNumber*) Jtranspose, 3, 4, "Jtranspose");
   Matrix.Multiply((BigNumber*)Jtranspose, (BigNumber*)Jnew, 3, 4, 3, (BigNumber*)Jproduct); //transpose(Jnew)*Jnew=Anew
   Serial.println ("Step 2 complete");
 
