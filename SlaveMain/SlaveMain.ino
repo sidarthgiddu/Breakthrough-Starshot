@@ -219,7 +219,7 @@ void runADCS(double* Magfield, double* omega, BigNumber Kp, BigNumber Kd) {
   BigNumber gyroData[3] = {BigNumber(om1), BigNumber(om2), BigNumber(om3)};
   BigNumber Bvalues[3] = {BigNumber(bom1), BigNumber(bom2), BigNumber(bom3)};
   
-  BigNumber J[9] = {0, Bvalues[2], BigNumber("-1")*Bvalues[1], BigNumber("-1")*Bvalues[2], 0, Bvalues[0], Bvalues[1], BigNumber("-1")*Bvalues[0], 0};
+  BigNumber J[9] = {0,Bvalues[2],BigNumber("-1")*Bvalues[1],BigNumber("-1")*Bvalues[2], 0, Bvalues[0], Bvalues[1], BigNumber("-1")*Bvalues[0], 0};
 
   Matrix.Copy((BigNumber*)Bvalues, 1, 3, (BigNumber*)Bfield); // create new field to scale for the pseudo-inverse
   Matrix.Scale((BigNumber*)Bfield, 3, 1, E); // scale duplicated Bfield array with E for pseudo-inverse
@@ -230,18 +230,14 @@ void runADCS(double* Magfield, double* omega, BigNumber Kp, BigNumber Kd) {
     {Bfield[0]*E, Bfield[1]*E, Bfield[2]*E}
   };
 
-  Matrix.Print((BigNumber*) Jnew, 4, 3, "Jnew");
-
   BigNumber Jtranspose[3][4];
   BigNumber Jproduct[3][3];
   BigNumber Jppinv[3][4];
 
   Matrix.Transpose((BigNumber*)Jnew, 4, 3, (BigNumber*)Jtranspose); // transpose(Jnew)
   Serial.println ("Step 1 complete");
-  //Matrix.Print((BigNumber*) Jtranspose, 3, 4, "Jtranspose");
   Matrix.Multiply((BigNumber*)Jtranspose, (BigNumber*)Jnew, 3, 4, 3, (BigNumber*)Jproduct); //transpose(Jnew)*Jnew=Anew
   Serial.println ("Step 2 complete");
-
   Matrix.Invert((BigNumber*)Jproduct, 3); // inverse(transpose(Jnew)*Jnew)=Bnew
   Serial.println ("Step 3 complete");
   Matrix.Multiply((BigNumber*)Jproduct, (BigNumber*)Jtranspose, 3, 3, 4, (BigNumber*)Jppinv); // Bnew*transpose(Jnew)=Cnew
@@ -256,7 +252,7 @@ void runADCS(double* Magfield, double* omega, BigNumber Kp, BigNumber Kd) {
   BigNumber OmegaError[3][1], BfieldError[3][1], ErrorSum[3][1];
   BigNumber Omegacmd[3][1] = {0, 0, 1};
   BigNumber Bcmd[3][1] = {0, 0, 1};
-  BigNumber A = 0.532;
+  BigNumber A = BigNumber("0.532");
 
   Matrix.Subtract((BigNumber*) Bvalues, (BigNumber*) Bcmd, 3, 1, (BigNumber*) BfieldError);
   Serial.println ("Step 5 complete");
@@ -279,10 +275,10 @@ void runADCS(double* Magfield, double* omega, BigNumber Kp, BigNumber Kd) {
 }
 
 void outputPWM(BigNumber* I, int length) {
-  float Imax = 2.0;
-  String I1 = I[0].toString();
-  String I2 = I[1].toString();
-  String I3 = I[2].toString();
+  float Imax = 0.2;
+  String I1 = I[0].toString(); 
+  String I2 = I[1].toString(); 
+  String I3 = I[2].toString(); Serial.println(I1.toFloat());
   float If[3] = {I1.toFloat(), I2.toFloat(), I3.toFloat()};
   free (&I[0]);
   free (&I[1]);
@@ -290,8 +286,10 @@ void outputPWM(BigNumber* I, int length) {
 
   for (int i = 0; i < length; i++) {
     if (abs(If[i]) > Imax) {
-      I[i] = Imax * sgn(I[i]);
+      Serial.println("saturated");
+      If[i] = Imax * sgn(If[i]);
     }
+    Serial.print(If[i]); Serial.println(" ");
   }
 
   // CREATE PWM OUT SIGNAL
@@ -581,7 +579,6 @@ void loop() {
 
   //Test ADCS
   if (millis() - lastADCSTime >= 2000) {
-    printBignum(Kd);
     runADCS(mData, gData, Kp, Kd); //placeholders
     Serial.print("X axis: "); Serial.print(StatusHolder.CurXDir, 20); Serial.print(" "); Serial.println(StatusHolder.CurXPWM, 20);
     Serial.print("Y axis: "); Serial.print(StatusHolder.CurYDir, 20); Serial.print(" "); Serial.println(StatusHolder.CurYPWM, 20);
