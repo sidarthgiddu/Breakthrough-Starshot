@@ -14,19 +14,20 @@
 #else
 #include "WProgram.h"
 #endif
+#include <BigNumber.h>
 
 class MatrixMath
 {
 public:
     //MatrixMath();
-    void Print(float* A, int m, int n, String label);
-    void Copy(float* A, int n, int m, float* B);
-    void Multiply(float* A, float* B, int m, int p, int n, float* C);
-    void Add(float* A, float* B, int m, int n, float* C);
-    void Subtract(float* A, float* B, int m, int n, float* C);
-    void Transpose(float* A, int m, int n, float* C);
-    void Scale(float* A, int m, int n, float k);
-    int Invert(float* A, int n);
+    void Print(BigNumber* A, int m, int n, String label);
+    void Copy(BigNumber* A, int n, int m, BigNumber* B);
+    void Multiply(BigNumber* A, BigNumber* B, int m, int p, int n, BigNumber* C);
+    void Add(BigNumber* A, BigNumber* B, int m, int n, BigNumber* C);
+    void Subtract(BigNumber* A, BigNumber* B, int m, int n, BigNumber* C);
+    void Transpose(BigNumber* A, int m, int n, BigNumber* C);
+    void Scale(BigNumber* A, int m, int n, BigNumber k);
+    int Invert(BigNumber* A, int n);
 };
 
 extern MatrixMath Matrix;

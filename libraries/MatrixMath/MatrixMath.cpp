@@ -7,6 +7,7 @@
  */
 
 #include "MatrixMath.h"
+#include <BigNumber.h>
 
 #define NR_END 1
 
@@ -14,21 +15,27 @@ MatrixMath Matrix;			// Pre-instantiate
 
 // Matrix Printing Routine
 // Uses tabs to separate numbers under assumption printed float width won't cause problems
-void MatrixMath::Print(float* A, int m, int n, String label){
+void MatrixMath::Print(BigNumber* A, int m, int n, String label){
     // A = input matrix (m x n)
     int i,j;
     Serial.println();
     Serial.println(label);
     for (i=0; i<m; i++){
         for (j=0;j<n;j++){
-            Serial.print(A[n*i+j]);
-            Serial.print("\t");
+            //Serial.print(A[n*i+j],20);
+            char * s = A[n*i+j].toString ();
+            Serial.print (s); Serial.print(" ");
+            free (s);
+            //Serial.print("\t");
+            //if (((n*i+j)==(n-1))||((n*i+j)==(2*n-1))||((n*i+j)==(3*n-1))){
+            //    Serial.println("");
+            //}
         }
         Serial.println();
     }
 }
 
-void MatrixMath::Copy(float* A, int n, int m, float* B)
+void MatrixMath::Copy(BigNumber* A, int n, int m, BigNumber* B)
 {
     int i, j, k;
     for (i=0;i<m;i++)
@@ -40,7 +47,7 @@ void MatrixMath::Copy(float* A, int n, int m, float* B)
 
 //Matrix Multiplication Routine
 // C = A*B
-void MatrixMath::Multiply(float* A, float* B, int m, int p, int n, float* C)
+void MatrixMath::Multiply(BigNumber* A, BigNumber* B, int m, int p, int n, BigNumber* C)
 {
     // A = input matrix (m x p)
     // B = input matrix (p x n)
@@ -60,7 +67,7 @@ void MatrixMath::Multiply(float* A, float* B, int m, int p, int n, float* C)
 
 
 //Matrix Addition Routine
-void MatrixMath::Add(float* A, float* B, int m, int n, float* C)
+void MatrixMath::Add(BigNumber* A, BigNumber* B, int m, int n, BigNumber* C)
 {
     // A = input matrix (m x n)
     // B = input matrix (m x n)
@@ -75,7 +82,7 @@ void MatrixMath::Add(float* A, float* B, int m, int n, float* C)
 
 
 //Matrix Subtraction Routine
-void MatrixMath::Subtract(float* A, float* B, int m, int n, float* C)
+void MatrixMath::Subtract(BigNumber* A, BigNumber* B, int m, int n, BigNumber* C)
 {
     // A = input matrix (m x n)
     // B = input matrix (m x n)
@@ -90,7 +97,7 @@ void MatrixMath::Subtract(float* A, float* B, int m, int n, float* C)
 
 
 //Matrix Transpose Routine
-void MatrixMath::Transpose(float* A, int m, int n, float* C)
+void MatrixMath::Transpose(BigNumber* A, int m, int n, BigNumber* C)
 {
     // A = input matrix (m x n)
     // m = number of rows in A
@@ -102,7 +109,7 @@ void MatrixMath::Transpose(float* A, int m, int n, float* C)
             C[m*j+i]=A[n*i+j];
 }
 
-void MatrixMath::Scale(float* A, int m, int n, float k)
+void MatrixMath::Scale(BigNumber* A, int m, int n, BigNumber k)
 {
     for (int i=0; i<m; i++)
         for (int j=0; j<n; j++)
@@ -117,30 +124,34 @@ void MatrixMath::Scale(float* A, int m, int n, float k)
 //	 NUMERICAL RECIPES: The Art of Scientific Computing.
 // * The function returns 1 on success, 0 on failure.
 // * NOTE: The argument is ALSO the result matrix, meaning the input matrix is REPLACED
-int MatrixMath::Invert(float* A, int n)
+int MatrixMath::Invert(BigNumber* A, int n)
 {
     // A = input matrix AND result matrix
     // n = number of rows = number of columns in A (n x n)
     int pivrow;		// keeps track of current pivot row
     int k,i,j;		// k: overall index along diagonal; i: row index; j: col index
     int pivrows[n]; // keeps track of rows swaps to undo at end
-    float tmp;		// used for finding max value and making column swaps
+    BigNumber tmp;		// used for finding max value and making column swaps
+    BigNumber zero=0;
+    BigNumber one=1.0;
     
     for (k = 0; k < n; k++)
     {
         // find pivot row, the row with biggest entry in current column
-        tmp = 0;
+        
+        BigNumber tmp = 0;
         for (i = k; i < n; i++)
         {
-            if (abs(A[i*n+k]) >= tmp)	// 'Avoid using other functions inside abs()?'
+            BigNumber two=2;
+            if ((A[i*n+k].pow(two)).sqrt() >= tmp)	// 'Avoid using other functions inside abs(A[i*n+k])?'
             {
-                tmp = abs(A[i*n+k]);
+                tmp = (A[i*n+k].pow(two)).sqrt(); //abs of A[i*n+k]
                 pivrow = i;
             }
         }
         
         // check for singular matrix
-        if (A[pivrow*n+k] == 0.0f)
+        if (A[pivrow*n+k] == zero)
         {
             Serial.println("Inversion failed due to singular matrix");
             return 0;
@@ -159,8 +170,8 @@ int MatrixMath::Invert(float* A, int n)
         }
         pivrows[k] = pivrow;	// record row swap (even if no swap happened)
         
-        tmp = 1.0f/A[k*n+k];	// invert pivot element
-        A[k*n+k] = 1.0f;		// This element of input matrix becomes result matrix
+        tmp = one/A[k*n+k];	// invert pivot element
+        A[k*n+k] = one;		// This element of input matrix becomes result matrix
         
         // Perform row reduction (divide every element by pivot)
         for (j = 0; j < n; j++)
@@ -174,7 +185,7 @@ int MatrixMath::Invert(float* A, int n)
             if (i != k)
             {
                 tmp = A[i*n+k];
-                A[i*n+k] = 0.0f;  // The other place where in matrix becomes result mat
+                A[i*n+k] = zero;  // The other place where in matrix becomes result mat
                 for (j = 0; j < n; j++)
                 {
                     A[i*n+j] = A[i*n+j] - A[k*n+j]*tmp;
