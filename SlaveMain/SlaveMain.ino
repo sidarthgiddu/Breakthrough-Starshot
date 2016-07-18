@@ -256,17 +256,16 @@ void runADCS(double* Magfield, double* omega, BigNumber Kp, BigNumber Kd) {
   Jp[2][0] = Jppinv[2][0]; Jp[2][1] = Jppinv[2][1]; Jp[2][2] = Jppinv[2][2];
   
   freeRam ();
-  BigNumber current[3][1];
-  BigNumber OmegaError[3][1], BfieldError[3][1], ErrorSum[3][1];
-  BigNumber Omegacmd[3][1] = {0, 0, 1};
-  BigNumber Bcmd[3][1] = {0, 0, 1};
+  BigNumber OmegaError[3], BfieldError[3], ErrorSum[3];
+  BigNumber Omegacmd[3] = {0, 0, 1};
+  BigNumber Bcmd[3] = {0, 0, 1};
   BigNumber A = BigNumber("0.532");
 
   Matrix.Subtract((BigNumber*) Bvalues, (BigNumber*) Bcmd, 3, 1, (BigNumber*) BfieldError);
   Serial.println ("Step 5 complete");
   Matrix.Subtract((BigNumber*) gyroData, (BigNumber*) Omegacmd, 3, 1, (BigNumber*) OmegaError);
   Serial.println ("Step 6 complete");
-
+  freeRam ();
   Matrix.Scale((BigNumber*)BfieldError, 3, 1, Kp / A); // scale error with proportional gain (updates array)
   Serial.println ("Step 7 complete");
   Matrix.Scale((BigNumber*)OmegaError, 3, 1, Kd / A); // scale error with derivative gain (updates array)
@@ -276,10 +275,12 @@ void runADCS(double* Magfield, double* omega, BigNumber Kp, BigNumber Kd) {
   Serial.println ("Step 9 complete");
   Matrix.Scale((BigNumber*) ErrorSum, 3, 1, -1.0); // prep error for multiplication with the Jpinv matrix
   Serial.println ("Step 10 complete");
-  Matrix.Multiply((BigNumber*) Jp, (BigNumber*) ErrorSum, 3, 3, 1, (BigNumber*) current);
+  freeRam ();
+  Matrix.Multiply((BigNumber*) Jp, (BigNumber*) ErrorSum, 3, 3, 1, (BigNumber*) ErrorSum);
   Serial.println ("Step 11 complete");
 
-  outputPWM((BigNumber*) current, 3);
+  freeRam ();
+  outputPWM((BigNumber*) ErrorSum, 3);
 }
 
 void outputPWM(BigNumber* I, int length) {
@@ -591,6 +592,12 @@ void loop() {
     lastADCSTime = millis();
     } else {
       //torquers off
+      //analogWrite(CX_PWM, 0);
+      //analogWrite(CY_PWM, 0);
+      //analogWrite(CZ_PWM, 0);
+      //floatTuple PWMvaluesForTorquers = floatTuple(0,0,0;
+      //floatTuple PWMdirectionsForTorquers = floatTuple(0,0,0);
+      //StatusHolder.updateTorquers(PWMdirectionsForTorquers, PWMvaluesForTorquers);
     }
   }
 
