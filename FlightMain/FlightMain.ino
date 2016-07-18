@@ -37,6 +37,7 @@ unsigned long deployArmedEntry;
 unsigned long deployVEntry;
 unsigned long forceExitEclipseTime = 50 * 60 * 1000;
 unsigned long forceLPEclipseTime = 180 * 60 * 1000;
+unsigned long lastAccelTime;
 
 float LV_Threshold = 3.2;
 float HV_Threshold = 3.8;
@@ -232,6 +233,7 @@ class masterStatus {
     int NextState;
     float Mag[3];
     float Gyro[3];
+    float Accel[3];
     int ImuTemp;
     float Battery;
     float SolarXPlus;
@@ -252,7 +254,9 @@ class masterStatus {
 
     float * IMUData[3];
     float * LIGHTData;
+    float * AccelData[3];
     int dataIndex;
+    int accelIndex;
 
     bool ADCS_Active;
     int MResets;
@@ -305,6 +309,7 @@ class masterStatus {
       IMUData[3][360] = {0};
       LIGHTData[360] = {0};
       dataIndex = 0;
+      accelIndex = 0;
     }
     void updateSensors(int wT) {
       if (imuWorking) {
@@ -331,6 +336,7 @@ class masterStatus {
       imu.setupMag(imu.LSM9DS0_MAGGAIN_2GAUSS);
       //set gyro range to +-245 degrees per second
       imu.setupGyro(imu.LSM9DS0_GYROSCALE_245DPS);
+      //imu.setupAccel(imu.LSM9DS0_ACCEL_MG_LSB_2G);
     }
     String toString() {
       //Produces JSON Output in ASCII  for Downlink
@@ -965,11 +971,10 @@ void loop() {
         sendSCommand(data); //Prep Camera
         digitalWrite(24, HIGH); //Activate Nichrome
       }
-      //for (int j = 0; j < Acceldata.length(), j++) { //Wait for DoorSensor, check for spikes in accelerometer
-      if (masterStatusHolder.DoorSense == LOW) { //Acceldata[j] > "" ||
+      if (masterStatusHolder.DoorSense == LOW) { //wait for door sensor
         //Door is open
         //sendSCommand(); //Trigger Camera
-        digitalWrite(DoorTrig, LOW);
+        digitalWrite(DoorTrig, LOW); //deactivate nichrome wire
         masterStatusHolder.NextState = DEPLOY_VERIF;
         deployVEntry = millis();
 
@@ -984,46 +989,52 @@ void loop() {
 
 
     case (DEPLOY_VERIF):
-      
-        buildBuffer(requestFromSlave());
+      float accel[40];
+      buildBuffer(requestFromSlave());
+      lastAccelTime = millis();
 
-        //if > 1 sec {
-        // IMUData[0][dataIndex] = gyro.X
-        // IMUData[1][dataIndex] = gyro.Y
-        // dataIndex++;
-        //}
+      if (millis() - lastAccelTime >= 1000 &&  masterStatusHolder.accelIndex <= 40) //take accelerometer data every .5s for 20s
+      {
+        masterStatusHolder.AccelData[0][masterStatusHolder.accelIndex] = masterStatusHolder.Accel[0];
+        masterStatusHolder.AccelData[1][masterStatusHolder.accelIndex] = masterStatusHolder.Accel[1];
+        masterStatusHolder.AccelData[2][masterStatusHolder.accelIndex] = masterStatusHolder.Accel[2];
+        lastAccelTime = millis();
+        masterStatusHolder.accelIndex++;
+      }
 
 
+      //      if (LightSens > " " ){ //LightSensor Trigger
+      //        masterStatusHolder.PayloadDeployed == true;
+      //        }
+      //      else {
+      //        masterStatusHolder.PayloadDeployed == false;
+      //        }
+  
+  break;
 
-        //      if (LightSens > " " ) //LightSensor Trigger
-        //        masterStatusHolder.PayloadDeployed == true;
-        //      else
-        //        masterStatusHolder.PayloadDeployed == false;
-      
-      break;
 
-    case (DEPLOY_DOWN_LK): 
-        //Upon Request Downlink Image
-        //Downlink Data
-      
-      break;
-
-    case (LOW_POWER):
-        masterStatusHolder.updateSensors(1); //No need for IMU Data so short dwell
-        if (masterStatusHolder.Battery >= HV_Threshold) {
-          masterStatusHolder.NextState = NORMAL_OPS;
-        } else {
-          delay(10000);
-        }
-      
-      break;
-
+case (DEPLOY_DOWN_LK): {
+    //Upon Request Downlink Image
+    //Downlink Data
   }
-  masterStatusHolder.State = masterStatusHolder.NextState;
-  //Testing Iterators
-  cycle++;
-  //Serial.print("C: ");
-  //Serial.println(cycle);
+  break;
+
+case (LOW_POWER):
+    masterStatusHolder.updateSensors(1);
+    if (masterStatusHolder.Battery * 2 >= HV_Threshold) {
+      masterStatusHolder.NextState = NORMAL_OPS;
+    } else {
+      delay(10000);
+    }
+  
+  break;
+
+}
+masterStatusHolder.State = masterStatusHolder.NextState;
+//Testing Iterators
+cycle++;
+//Serial.print("C: ");
+//Serial.println(cycle);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////
