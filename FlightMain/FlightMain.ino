@@ -123,6 +123,9 @@ float placeHolderLightSense = 5.5;
 float placeHolderAnalogTemp = 21.0;
 int placeHoldernumPhotos = 10;
 
+//Deployment Test
+bool DA_Initialize = true;
+
 class floatTuple
 {
   public:
@@ -914,7 +917,8 @@ void loop() {
     case (INITALIZATION):
       {
         //Initiate Detumble "41,1!"-->"51,1!"?
-        sendSCommand("51,1!");
+        char data[] = {'5', '1', ',', '1', '!'};
+        sendSCommand(data);
         //Listen to Status Reports
         if (masterStatusHolder.Gyro[0] < gyroThresholdX && masterStatusHolder.Gyro [1] < gyroThresholdY) {
           masterStatusHolder.NextState = NORMAL_OPS;
@@ -926,8 +930,6 @@ void loop() {
         if (millis() - initEntry > (long)2700000) {
           //call downlink function
         }
-
-        //init sleep
         break;
       }
 
@@ -968,10 +970,11 @@ void loop() {
       }
 
     case (DEPLOY_ARMED):
-      if (deployArmedEntry - millis() < 20) {
+      if (DA_Initialize) {
         char data[] = {'6', '1', ',', '1', '!'};
         sendSCommand(data); //Prep Camera
         digitalWrite(24, HIGH); //Activate Nichrome
+        DA_Initialize = false;
       }
       if (masterStatusHolder.DoorSense == LOW) { //wait for door sensor
         //Door is open
