@@ -840,6 +840,7 @@ void loop() {
           }
         }
       }
+      
       //ADCS
       if (millis() - LastSpinCheckT > SpinCheckTime) {
         float spinMagnitude = 0;

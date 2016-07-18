@@ -1,5 +1,5 @@
 #include <Wire.h>
-include <BigNumber.h>
+#include <BigNumber.h>
 #include <MatrixMath.h>
 
 ////Constant Initialization
@@ -532,6 +532,7 @@ void loop() {
 
   //Test ADCS
   if (StatusHolder.ADCS_Active && millis() - lastADCSTime >= 3000) {
+    if (!(millis() - lastADCSTime >= 3000
     runADCS(mData, gData, Kp, Kd); //placeholders
     Serial.print("X axis: "); Serial.print(StatusHolder.CurXDir, 20); Serial.print(" "); Serial.println(StatusHolder.CurXPWM, 20);
     Serial.print("Y axis: "); Serial.print(StatusHolder.CurYDir, 20); Serial.print(" "); Serial.println(StatusHolder.CurYPWM, 20);
