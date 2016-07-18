@@ -65,22 +65,22 @@ bool TestSCom = true;
 long lastSComTime = 0;
 long lastSComAttempt = 0;
 int SComTime = 10;
-long SlaveResetTimeOut = 30 * 1000;
+unsigned long SlaveResetTimeOut = 30 * 1000;
 int slaveDataSize = 100;
 
 //ADCS Test
 unsigned long LastSpinCheckT = 0;
-long SpinCheckTime = 5 * 60 * 1000;
+unsigned long SpinCheckTime = 5 * 60 * 1000;
 float OmegaThreshold = 30; //Degrees per second
 
 //Serial Command Test
 int popTime = 4000;
-long lastPopTime = 0;
+unsigned long lastPopTime = 0;
 
 //RockBlock Test
 //IridiumSBD iSBD = IridiumSBD(Serial, 22); //RBSleep Pin
-long SBDCallBackStartTime = 0;
-long RBForcedTimeout = 30 * 1000;
+unsigned long SBDCallBackStartTime = 0;
+unsigned long RBForcedTimeout = 30 * 1000;
 
 //Commanded Action Flags
 bool commandedSC = false;
@@ -803,19 +803,6 @@ void loop() {
           //Do RockBlock Stuff
         }
 
-        //Blinker for Testing
-        if (millis() - ledLastTime >= 300) {
-          if (ledState == LOW) {
-            ledState = HIGH;
-          } else {
-            ledState = LOW;
-          }
-          digitalWrite(13, ledState);
-          Serial.print("Running: ");
-          Serial.println(millis() - ledLastTime);
-          ledLastTime = millis();
-        }
-
         //Testing IMU and Sensor Downlink String Generator
         if (millis() - lastDLTime >= DLTime || commandedDL) {
           //Send Data to RockBlock via Serial
@@ -896,7 +883,19 @@ void loop() {
           masterStatusHolder.NextState = LOW_POWER;
           lowPowerEntry = millis();
         }
-
+        
+         //Blinker for Testing
+        if (millis() - ledLastTime >= 500) {
+          if (ledState == LOW) {
+            ledState = HIGH;
+          } else {
+            ledState = LOW;
+          }
+          digitalWrite(13, ledState);
+          Serial.print("Running: ");
+          Serial.println(millis() - ledLastTime);
+          ledLastTime = millis();
+        }
         break;
       }
 
@@ -1013,6 +1012,7 @@ void loop() {
   
     break;
 
+
 case (DEPLOY_DOWN_LK): {
     //Upon Request Downlink Image
     //Downlink Data
@@ -1020,8 +1020,7 @@ case (DEPLOY_DOWN_LK): {
   break;
 
 case (LOW_POWER):
-  
-    masterStatusHolder.updateSensors(imuSensorDwell);
+    masterStatusHolder.updateSensors(1);
     if (masterStatusHolder.Battery * 2 >= HV_Threshold) {
       masterStatusHolder.NextState = NORMAL_OPS;
     } else {
