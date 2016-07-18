@@ -33,8 +33,11 @@ unsigned long lowPowerEntry;
 unsigned long normOpEntry;
 unsigned long initEntry;
 unsigned long initSleepEntry;
+unsigned long deployArmedEntry;
+unsigned long deployVEntry;
 unsigned long forceExitEclipseTime = 50 * 60 * 1000;
 unsigned long forceLPEclipseTime = 180 * 60 * 1000;
+
 float LV_Threshold = 3.2;
 float HV_Threshold = 3.8;
 float EclipseAmp_Threshold = 0.01;
@@ -51,6 +54,8 @@ bool imuWorking = true;
 bool masterUseIMU = true;
 ///Adafruit_LSM9DS0 imu = Adafruit_LSM9DS0();
 int imuSensorDwell = 50;
+float gyroThresholdY = 3;
+float gyroThresholdX = 3;
 
 //Slave Communication Test
 bool slaveWorking = true;
@@ -225,6 +230,7 @@ class masterStatus {
     Adafruit_LSM9DS0 imu;
 
     int State;
+    int NextState;
     float Mag[3];
     float Gyro[3];
     int ImuTemp;
@@ -245,6 +251,10 @@ class masterStatus {
     bool PayloadDeployed;
 
 
+    float * IMUData[3];
+    float * LIGHTData;
+    int dataIndex;
+
     bool ADCS_Active;
     int MResets;
     int CurXDir; //-1 or 1 for Coil Current Direction
@@ -263,6 +273,7 @@ class masterStatus {
                  bool pd = false) {
 
       State = S;
+      NextState = State;
       PayloadDeployed = pd;
       imu = Adafruit_LSM9DS0();
       Gyro[0] = g.x; Gyro[1] = g.y; Gyro[2] = g.z;
@@ -291,6 +302,10 @@ class masterStatus {
       CurYPWM = YP;
       CurZDir = ZD;
       CurZPWM = ZP;
+
+      IMUData[3][360] = {0};
+      LIGHTData[360] = {0};
+      dataIndex = 0;
     }
     void updateSensors(int wT) {
       if (imuWorking) {
@@ -419,7 +434,7 @@ float getCurrentAmp(int panel) {
 }
 
 
-float getTotalAmperage () {
+float getTotalAmperage() {
   //Check the amps from each solar panel and returns total amperage
   float TotalCurrent = 0;
   for (int i = 1 ; i <= 6; i++) {
@@ -668,7 +683,7 @@ String buildIMUDataCommand() {
   return res;
 }
 
-void sendIMUToSLave() {
+void sendIMUToSlave() {
   String SCommand = buildIMUDataCommand();
   char SComCharA[SCommand.length()];
   SCommand.toCharArray(SComCharA, SCommand.length());
@@ -769,229 +784,249 @@ void setup()
 void loop() {
   switch (masterStatusHolder.State) {
     case (NORMAL_OPS):
+      {
 
-      //Collect Sensor Data
-      //if (SensorFetch) {
-      masterStatusHolder.updateSensors(imuSensorDwell);
-      //Request Light/Temp Data From Slave
-      //}
+        //Collect Sensor Data
+        //if (SensorFetch) {
+        masterStatusHolder.updateSensors(imuSensorDwell);
+        //Request Light/Temp Data From Slave
+        //}
 
-      if (millis() - lastRBCheck >= RBCheckTime) {
-        //Do RockBlock Stuff
-      }
-
-      //Blinker for Testing
-      if (millis() - ledLastTime >= 300) {
-        if (ledState == LOW) {
-          ledState = HIGH;
-        } else {
-          ledState = LOW;
+        if (millis() - lastRBCheck >= RBCheckTime) {
+          //Do RockBlock Stuff
         }
-        digitalWrite(13, ledState);
-        Serial.print("Running: ");
-        Serial.println(millis() - ledLastTime);
-        ledLastTime = millis();
-      }
 
-      //Testing IMU and Sensor Downlink String Generator
-      if (millis() - lastDLTime >= DLTime || commandedDL) {
-        //Send Data to RockBlock via Serial
-        Serial.println("Downlink String: ");
-        String DLS = masterStatusHolder.toString();
-
-
-        Serial.println(DLS);
-        Serial.println(DLS.length());
-        lastDLTime = millis();
-      }
-
-      //Test Slave Communication
-      if (TestSCom) {
-        if (millis() - lastSComAttempt >= SComTime || commandedSC) {
-          lastSComAttempt = millis();
-          //Serial.print("Slave Status Report: "); //Stalls here with Wire?
-          sendIMUToSLave();
-          String SlaveResponse = requestFromSlave();
-
-          if (!SlaveResponse.equals("")) {
-            lastSComTime = millis(); //Reset Timeout if Com is successful
-            if (isInputValid(SlaveResponse)) {
-              //Serial.println(Valid Reply From Slave);
-              buildBuffer(SlaveResponse);
-            } else {
-              //Serial.println("Invalid Response");
-            }
+        //Blinker for Testing
+        if (millis() - ledLastTime >= 300) {
+          if (ledState == LOW) {
+            ledState = HIGH;
           } else {
-            //No Reply From Slave
-            //            if (millis() - lastSComTime > SlaveResetTimeOut) {
-            //
-            //              //No Communication for (SlaveResetTimeOut) ms
-            //              slaveWorking = false;
-            //
-            //              if (!slaveWorking) {
-            //                digitalWrite(SlaveReset, LOW);
-            //                delay(50);
-            //                digitalWrite(SlaveReset, HIGH);
-            //                SlaveResets++;
-            //                //delay(1000);
-            //                Serial.println("Slave Reset");
-            //              }
-            //            } else {
-            Serial.print("No Reply From Slave for ");
-            Serial.print((millis() - lastSComTime) / 1000.0);
-            Serial.println(" seconds");
-            //            }
+            ledState = LOW;
+          }
+          digitalWrite(13, ledState);
+          Serial.print("Running: ");
+          Serial.println(millis() - ledLastTime);
+          ledLastTime = millis();
+        }
+
+        //Testing IMU and Sensor Downlink String Generator
+        if (millis() - lastDLTime >= DLTime || commandedDL) {
+          //Send Data to RockBlock via Serial
+          Serial.println("Downlink String: ");
+          String DLS = masterStatusHolder.toString();
+
+
+          Serial.println(DLS);
+          Serial.println(DLS.length());
+          lastDLTime = millis();
+        }
+
+        //Test Slave Communication
+        if (TestSCom) {
+          if (millis() - lastSComAttempt >= SComTime || commandedSC) {
+            lastSComAttempt = millis();
+            //Serial.print("Slave Status Report: "); //Stalls here with Wire?
+            sendIMUToSlave();
+            String SlaveResponse = requestFromSlave();
+
+            if (!SlaveResponse.equals("")) {
+              lastSComTime = millis(); //Reset Timeout if Com is successful
+              if (isInputValid(SlaveResponse)) {
+                //Serial.println(Valid Reply From Slave);
+                buildBuffer(SlaveResponse);
+              } else {
+                //Serial.println("Invalid Response");
+              }
+            } else {
+              //No Reply From Slave
+              //            if (millis() - lastSComTime > SlaveResetTimeOut) {
+              //
+              //              //No Communication for (SlaveResetTimeOut) ms
+              //              slaveWorking = false;
+              //
+              //              if (!slaveWorking) {
+              //                digitalWrite(SlaveReset, LOW);
+              //                delay(50);
+              //                digitalWrite(SlaveReset, HIGH);
+              //                SlaveResets++;
+              //                //delay(1000);
+              //                Serial.println("Slave Reset");
+              //              }
+              //            } else {
+              Serial.print("No Reply From Slave for ");
+              Serial.print((millis() - lastSComTime) / 1000.0);
+              Serial.println(" seconds");
+              //            }
+            }
           }
         }
-      }
-      //ADCS
-      if (millis() - LastSpinCheckT > SpinCheckTime) {
-        float spinMagnitude = 0;
-        for (int i = 0; i < 3; i++) {
-          spinMagnitude = pow(masterStatusHolder.Gyro[i], 2);
+
+        //ADCS
+        if (millis() - LastSpinCheckT > SpinCheckTime) {
+          float spinMagnitude = 0;
+          for (int i = 0; i < 3; i++) {
+            spinMagnitude = pow(masterStatusHolder.Gyro[i], 2);
+          }
+          spinMagnitude = sqrt(spinMagnitude);
+          if (spinMagnitude > OmegaThreshold) {
+            sendSCommand("91,1!"); //Activate Torquers
+          }
+
+          spinMagnitude = sqrt(spinMagnitude);
+          if (spinMagnitude > OmegaThreshold) {
+            //Command Detumble
+
+          }
         }
-        spinMagnitude = sqrt(spinMagnitude);
-        if (spinMagnitude > OmegaThreshold) {
 
+        //Eclipse Detection
+        if (getTotalAmperage() < EclipseAmp_Threshold) {
+          masterStatusHolder.NextState = ECLIPSE;
+          eclipseEntry = millis();
         }
-      }
+        //Low Power Detection
+        if (masterStatusHolder.Battery * 2 < LV_Threshold) {
+          masterStatusHolder.NextState = LOW_POWER;
+          lowPowerEntry = millis();
+        }
 
-      //Eclipse Detection
-      if (getTotalAmperage() < EclipseAmp_Threshold) {
-        masterStatusHolder.State = ECLIPSE;
-        eclipseEntry = millis();
+        break;
       }
-      //Low Power Detection
-      if (masterStatusHolder.Battery * 2 < LV_Threshold) {
-        masterStatusHolder.State = LOW_POWER;
-        lowPowerEntry = millis();
-      }
-
-      break;
 
     case (DORMANT_CRUISE):
-      //30 min Dormant Cruise
-      if (millis() > cruiseEnd) {
-        masterStatusHolder.State = INITALIZATION;
-        initEntry = millis();
-        initEntry = millis();
-      } else {
-        delay(10000);
+      {
+        //30 min Dormant Cruise
+        if (millis() > cruiseEnd) {
+          masterStatusHolder.NextState = INITALIZATION;
+          initEntry = millis();
+        } else {
+          delay(10000);
+        }
+        break;
       }
-      break;
 
     case (INITALIZATION):
-      //Initiate Detumble "41,1!"-->"51,1!"?
-      sendSCommand("51,1!");
-      //Listen to Status Reports
-      float Gyro[50];
-      if (Gyro[0] < "" && Gyro[1] < "") {
-        masterStatusHolder.State = NORM_OPS;
-      }
-      //Check battery ->> INIT_SLEEP
-      if (masterStatusHolder.Battery < LV_Threshold) {
-        masterStatusHolder.State = INIT_SLEEP;
-      }
-      if (millis() - initEntry> (long)2700000) {
-        //call downlink function
-      }
-      break;
+      {
+        //Initiate Detumble "41,1!"-->"51,1!"?
+        sendSCommand("51,1!");
+        //Listen to Status Reports
+        if (masterStatusHolder.Gyro[0] < gyroThresholdX && masterStatusHolder.Gyro [1] < gyroThresholdY) {
+          masterStatusHolder.NextState = NORMAL_OPS;
+        }
+        //Check battery ->> INIT_SLEEP
+        if (masterStatusHolder.Battery < LV_Threshold) {
+          masterStatusHolder.NextState = INIT_SLEEP;
+        }
+        if (millis() - initEntry > (long)2700000) {
+          //call downlink function
+        }
 
-
-    case (INIT_SLEEP):
-      //Check Time
-      EnterINIT_SLEEP = millis();
-      if (millis() - EnterINIT_SLEEP > "") {
-        masterStatusHolder.State = INITIALIZATION;
+        //init sleep
+        break;
       }
-      //Check battery ->> INITALIZATION
-      if (masterStatusHolder.Battery > HV_Threshold) {
-        masterStatusHolder.State = INITIALIZATION;
+
+    case (INIT_SLEEP): {
+        //Check Time
+        if (millis() - initSleepEntry > (long)60 * 45 * 1000) {
+          masterStatusHolder.NextState = INITALIZATION;
+        }
+        //Check battery ->> INITALIZATION
+        if (masterStatusHolder.Battery > HV_Threshold) {
+          masterStatusHolder.NextState = INITALIZATION;
+        }
       }
       break;
 
     case (ECLIPSE):
-      //Check Battery
-      if (masterStatusHolder.Battery < LV_Threshold) {
-        masterStatusHolder.State = LOW_POWER;
+
+      {
+        //Check Battery
+        //Check Solar Current
+        //Check Time
+        //Magtorquers off?
+        //Check Battery
+        if (masterStatusHolder.Battery < LV_Threshold) {
+          masterStatusHolder.NextState = LOW_POWER;
+        }
+        //Check Solar Current
+        //Check Time
+        float Amps = getTotalAmperage();
+        if (Amps > .1 || millis() - eclipseEntry > forceExitEclipseTime) {
+          masterStatusHolder.NextState = NORMAL_OPS;
+          normOpEntry = millis();
+        } else {
+          delay(10000);
+        }
+        break;
+
       }
-      //Check Solar Current
-      float getTotalAmperage[4];
-      //Check Time
 
+    case (DEPLOY_ARMED):
+      if (deployArmedEntry - millis() < 20) {
+        char data[] = {'6', '1', ',', '1', '!'};
+        sendSCommand(data); //Prep Camera
+        digitalWrite(24, HIGH); //Activate Nichrome
+      }
+      //for (int j = 0; j < Acceldata.length(), j++) { //Wait for DoorSensor, check for spikes in accelerometer
+      if (masterStatusHolder.DoorSense == LOW) { //Acceldata[j] > "" ||
+        //Door is open
+        //sendSCommand(); //Trigger Camera
+        digitalWrite(DoorTrig, LOW);
+        masterStatusHolder.NextState = DEPLOY_VERIF;
+        deployVEntry = millis();
 
-      if (getTotalAmperage() > .1 || millis() - eclipseEntry > forceExitEclipseTime) {
-        masterStatusHolder.State = NORMAL_OPS;
-        normOpEntry = millis();
       } else {
-        delay(10000);
+        if (millis() - deployArmedEntry > (long)60 * 6 * 1000) {
+          digitalWrite(DoorTrig, LOW);
+          //Notifiy of failure
+        }
+      }
+
+      break;
+
+
+    case (DEPLOY_VERIF):
+      {
+        buildBuffer(requestFromSlave());
+
+        //if > 1 sec {
+        // IMUData[0][dataIndex] = gyro.X
+        // IMUData[1][dataIndex] = gyro.Y
+        // dataIndex++;
+        //}
+
+
+
+        //      if (LightSens > " " ) //LightSensor Trigger
+        //        masterStatusHolder.PayloadDeployed == true;
+        //      else
+        //        masterStatusHolder.PayloadDeployed == false;
       }
       break;
 
-    case (DEPLOY_ARMED):
-      sendSCommand(char data[61, 1!]) //Prep Camera
-      float IMU[360]; //memory to measure once a sec for 6 min
-      float LIGHT [60]; //memory to measure light every 10 seconds
-      float Acceldata[];
-      digitalWrite(24, HIGH); //Activate Nichrome
-      bool DoorOpen = false;
-                      for (int j = 0; j < Acceldata, length (), j++) //Wait for DoorSensor, check for spikes in accelerometer
-                        if Acceldata[j] > "" || (DoorSens == LOW);
-      DoorOpen = true;
-      sendSCommand() ;//Trigger Camera
-      masterStatusHolder.DoorSense == 1;
-      digitalWrite(24, LOW);
+    case (DEPLOY_DOWN_LK): {
+        //Upon Request Downlink Image
+        //Downlink Data
+      }
+      break;
 
-      break
-      else
-        delay(60000) //wait one minute
-        sendSCommand() ;// if nothing happens in one minute Trigger Camera
-      delay(360000); //wait another 6 minutes until disabling door trigger
-      digitalWrite(24, LOW);
-      == == == =
-        MasterStatusHoler.State = DEPLOY_VERIF;
+    case (LOW_POWER):
+      {
+        masterStatusHolder.updateSensors(imuSensorDwell);
+        if (masterStatusHolder.Battery * 2 >= HV_Threshold) {
+          masterStatusHolder.NextState = NORMAL_OPS;
+        } else {
+          delay(10000);
+        }
+      }
+      break;
+
   }
-  break
-  else {
-    delay(60000) //wait one minute
-    sendSCommand() ;// if nothing happens in one minute start taking pictures
-    delay(360000); //wait another 6 minutes until disabling door trigger
-    digitalWrite(24, LOW);
-    MasterStatusHoler.State = DEPLOY_VERIF;
-  }
-  >>> >>> > c302939f00efa64548dee68ab9704c06592dae13
-  break;
-
-case (DEPLOY_VERIF):
-  buildBuffer(requestFromSlave());
-  if (LightSens > " " ) //LightSensor Trigger
-    masterStatusHolder.PayloadDeployed == true;
-  else
-    masterStatusHolder.PayloadDeployed == false;
-  break;
-
-case (DEPLOY_DOWN_LK):
-  //Upon Request Downlink Image
-  //Downlink Data
-  break;
-
-case (LOW_POWER):
-  masterStatusHolder.updateSensors(imuSensorDwell);
-  if (masterStatusHolder.Battery * 2 >= HV_Threshold) {
-    masterStatusHolder.State = NORMAL_OPS;
-  } else {
-    delay(10000);
-  }
-  break;
-
-case (SAFE_MODE):
-  //No Idea
-  break;
-}
-//Testing Iterators
-cycle++;
-//Serial.print("C: ");
-//Serial.println(cycle);
+  masterStatusHolder.State = masterStatusHolder.NextState;
+  //Testing Iterators
+  cycle++;
+  //Serial.print("C: ");
+  //Serial.println(cycle);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////

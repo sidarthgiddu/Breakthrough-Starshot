@@ -1,5 +1,5 @@
 #include <Wire.h>
-#include "BigNumber.h"
+#include <BigNumber.h>
 #include <MatrixMath.h>
 
 ////Constant Initialization
@@ -101,9 +101,9 @@ class slaveStatus
     float gyro[3];
     float mag[3];
 
-    slaveStatus(float t=0, int L=0, int r=0, int n=0, int XD=0, int XP=0,
-                int YD=0, int YP=0, int ZD=0, int ZP=0, 
-                floatTuple g = floatTuple(0,0,0), floatTuple M = floatTuple(0,0,0)) {
+    slaveStatus(float t = 0, int L = 0, int r = 0, int n = 0, int XD = 0, int XP = 0,
+                int YD = 0, int YP = 0, int ZD = 0, int ZP = 0,
+                floatTuple g = floatTuple(0, 0, 0), floatTuple M = floatTuple(0, 0, 0)) {
       Temp = t;
       Light = L;
       Resets = r;
@@ -130,8 +130,13 @@ class slaveStatus
       res += "!68," + String(CurYPWM);
       res += "!69," + String(CurZPWM);
       res += "!610," + String(numPhotos);
+<<<<<<< HEAD
+      res += "!"
+             return res;
+=======
       res += "!";
       return res;
+>>>>>>> 467bdeb886bbf0e5a006c84045af8b0b2498f34b
     }
     void print() {
       Serial.println(toString());
@@ -179,17 +184,35 @@ class commandBuffer {
 };
 commandBuffer cBuf;
 
+<<<<<<< HEAD
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+BigNumber mass = 1.33;
+BigNumber zero = 0.0, six = 6.0;
+=======
 ////////////////////////////////
 ////////////////////////////////
 ////////////////////////////////========================= ADCS DATA ==========================================================================
 BigNumber mass = "1.33";
 BigNumber zero = 0, six = 6;
+>>>>>>> 467bdeb886bbf0e5a006c84045af8b0b2498f34b
 BigNumber Bfield[3];
 BigNumber w[3];
 BigNumber Inertia[3][3] = {{mass / six, zero, zero},
   {zero, mass / six, zero},
   {zero, zero, mass / six}
 }; // Inertia initialization
+<<<<<<< HEAD
+BigNumber E = 1e-4;
+
+void runADCS(float* Magfield, float* omega, BigNumber Kp, BigNumber Kd) {
+  BigNumber gyroData[3] = {omega[0], omega[1], omega[2]};
+  BigNumber Bvalues[3] = {Magfield[0], Magfield[1], Magfield[2]};
+
+  BigNumber J[9] = {0, Bvalues[2], -Bvalues[1], -Bvalues[2], 0, Bvalues[0], Bvalues[1], -Bvalues[0], 0};
+=======
 BigNumber E = BigNumber("0.0001");
 
 void runADCS(double* Magfield, double* omega, BigNumber Kp, BigNumber Kd) {
@@ -219,7 +242,8 @@ void runADCS(double* Magfield, double* omega, BigNumber Kp, BigNumber Kd) {
   BigNumber gyroData[3] = {BigNumber(om1), BigNumber(om2), BigNumber(om3)};
   BigNumber Bvalues[3] = {BigNumber(bom1), BigNumber(bom2), BigNumber(bom3)};
   
-  BigNumber J[9] = {0, Bvalues[2], BigNumber("-1")*Bvalues[1], BigNumber("-1")*Bvalues[2], 0, Bvalues[0], Bvalues[1], BigNumber("-1")*Bvalues[0], 0};
+  BigNumber J[9] = {0,Bvalues[2],BigNumber("-1")*Bvalues[1],BigNumber("-1")*Bvalues[2], 0, Bvalues[0], Bvalues[1], BigNumber("-1")*Bvalues[0], 0};
+>>>>>>> 467bdeb886bbf0e5a006c84045af8b0b2498f34b
 
   Matrix.Copy((BigNumber*)Bvalues, 1, 3, (BigNumber*)Bfield); // create new field to scale for the pseudo-inverse
   Matrix.Scale((BigNumber*)Bfield, 3, 1, E); // scale duplicated Bfield array with E for pseudo-inverse
@@ -230,18 +254,14 @@ void runADCS(double* Magfield, double* omega, BigNumber Kp, BigNumber Kd) {
     {Bfield[0]*E, Bfield[1]*E, Bfield[2]*E}
   };
 
-  Matrix.Print((BigNumber*) Jnew, 4, 3, "Jnew");
-
   BigNumber Jtranspose[3][4];
   BigNumber Jproduct[3][3];
   BigNumber Jppinv[3][4];
 
   Matrix.Transpose((BigNumber*)Jnew, 4, 3, (BigNumber*)Jtranspose); // transpose(Jnew)
   Serial.println ("Step 1 complete");
-  //Matrix.Print((BigNumber*) Jtranspose, 3, 4, "Jtranspose");
   Matrix.Multiply((BigNumber*)Jtranspose, (BigNumber*)Jnew, 3, 4, 3, (BigNumber*)Jproduct); //transpose(Jnew)*Jnew=Anew
   Serial.println ("Step 2 complete");
-
   Matrix.Invert((BigNumber*)Jproduct, 3); // inverse(transpose(Jnew)*Jnew)=Bnew
   Serial.println ("Step 3 complete");
   Matrix.Multiply((BigNumber*)Jproduct, (BigNumber*)Jtranspose, 3, 3, 4, (BigNumber*)Jppinv); // Bnew*transpose(Jnew)=Cnew
@@ -256,7 +276,7 @@ void runADCS(double* Magfield, double* omega, BigNumber Kp, BigNumber Kd) {
   BigNumber OmegaError[3][1], BfieldError[3][1], ErrorSum[3][1];
   BigNumber Omegacmd[3][1] = {0, 0, 1};
   BigNumber Bcmd[3][1] = {0, 0, 1};
-  BigNumber A = 0.532;
+  BigNumber A = BigNumber("0.532");
 
   Matrix.Subtract((BigNumber*) Bvalues, (BigNumber*) Bcmd, 3, 1, (BigNumber*) BfieldError);
   Serial.println ("Step 5 complete");
@@ -279,9 +299,15 @@ void runADCS(double* Magfield, double* omega, BigNumber Kp, BigNumber Kd) {
 }
 
 void outputPWM(BigNumber* I, int length) {
+<<<<<<< HEAD
   float Imax = 2.0;
   String I1 = I[0].toString();
   String I2 = I[1].toString();
+=======
+  float Imax = 0.2;
+  String I1 = I[0].toString(); 
+  String I2 = I[1].toString(); 
+>>>>>>> 467bdeb886bbf0e5a006c84045af8b0b2498f34b
   String I3 = I[2].toString();
   float If[3] = {I1.toFloat(), I2.toFloat(), I3.toFloat()};
   free (&I[0]);
@@ -290,8 +316,10 @@ void outputPWM(BigNumber* I, int length) {
 
   for (int i = 0; i < length; i++) {
     if (abs(If[i]) > Imax) {
-      I[i] = Imax * sgn(I[i]);
+      Serial.println("saturated");
+      If[i] = Imax * sgn(If[i]);
     }
+    Serial.print(If[i]); Serial.println(" ");
   }
 
   // CREATE PWM OUT SIGNAL
@@ -455,6 +483,10 @@ void PopCommands() {
         case (23):
           StatusHolder.mag[2] = currentCommand[1];
           break;
+        case (91):
+          StatusHolder.ADCS_Active = currentCommand[1];
+          break;
+
       }
     } else {
       Serial.println("No Command");
@@ -462,13 +494,6 @@ void PopCommands() {
   }
 }
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-
-// function that executes whenever data is received from master
-// this function is registered as an event, see setup()
 void commandParser(int nBytes) {
   //Need nBytes?
   String command = "";
@@ -487,9 +512,12 @@ void commandParser(int nBytes) {
     Serial.println("Invalid Command");
   }
 }
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 void requestEvent() {
-  Serial.println("Data Request");
+  //Serial.println("Data Request");
   String r = StatusHolder.toString();
   char response[r.length()];
   r.toCharArray(response, r.length());
@@ -522,7 +550,6 @@ void initalizePinOut() {
   const int LED = 13;  pinMode(LED, OUTPUT);
 }
 
-
 void forcedStall() {
   digitalWrite(8, HIGH);
   int test[5] = {4};
@@ -536,12 +563,8 @@ void forcedStall() {
   int crash = z + 4;
   Serial.println(z);
   Serial.println("Didnt crash3");
-
-
-
-  //while(1);
+  while(1);
   digitalWrite(8, LOW);
-
 }
 
 void setup() {
@@ -568,8 +591,8 @@ void setup() {
   }
 
   //Forced Stall
-//  pinMode(12, INPUT_PULLUP);
-//  attachInterrupt(digitalPinToInterrupt(12), forcedStall, LOW);
+  //  pinMode(12, INPUT_PULLUP);
+  //  attachInterrupt(digitalPinToInterrupt(12), forcedStall, LOW);
 }
 
 int ledState = HIGH;
@@ -577,11 +600,16 @@ long ledLastTime = 0;
 long lastADCSTime = 0;
 
 void loop() {
+  
   StatusHolder.updatePassive();
 
   //Test ADCS
+<<<<<<< HEAD
+  if (StatusHolder.ADCS_Active && millis() - lastADCSTime >= 3000) {
+    if (!(millis() - lastADCSTime >= 3000
+=======
   if (millis() - lastADCSTime >= 2000) {
-    printBignum(Kd);
+>>>>>>> 467bdeb886bbf0e5a006c84045af8b0b2498f34b
     runADCS(mData, gData, Kp, Kd); //placeholders
     Serial.print("X axis: "); Serial.print(StatusHolder.CurXDir, 20); Serial.print(" "); Serial.println(StatusHolder.CurXPWM, 20);
     Serial.print("Y axis: "); Serial.print(StatusHolder.CurYDir, 20); Serial.print(" "); Serial.println(StatusHolder.CurYPWM, 20);
@@ -610,6 +638,8 @@ void loop() {
     //Serial.println(millis() - ledLastTime);
     ledLastTime = millis();
   }
+
+  if(
 
 }
 
