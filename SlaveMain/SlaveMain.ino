@@ -130,13 +130,8 @@ class slaveStatus
       res += "!68," + String(CurYPWM);
       res += "!69," + String(CurZPWM);
       res += "!610," + String(numPhotos);
-<<<<<<< HEAD
-      res += "!"
-             return res;
-=======
       res += "!";
       return res;
->>>>>>> 467bdeb886bbf0e5a006c84045af8b0b2498f34b
     }
     void print() {
       Serial.println(toString());
