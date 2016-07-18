@@ -104,6 +104,7 @@ class slaveStatus
     slaveStatus(float t = 0, int L = 0, int r = 0, int n = 0, int XD = 0, int XP = 0,
                 int YD = 0, int YP = 0, int ZD = 0, int ZP = 0,
                 floatTuple g = floatTuple(0, 0, 0), floatTuple M = floatTuple(0, 0, 0)) {
+      ADCS_Active = false;
       Temp = t;
       Light = L;
       Resets = r;
@@ -547,6 +548,8 @@ void setup() {
 
   initalizePinOut();
   slaveStatus StatusHolder = slaveStatus();
+
+  StatusHolder.ADCS_Active = true;
 
   //digitalWrite(MasterReset, HIGH); //Enable Master
   Wire.begin(8);
