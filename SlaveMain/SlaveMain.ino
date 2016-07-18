@@ -61,6 +61,12 @@ int getLightLvl() {
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+//Determine Remaining RAM
+extern "C" char *sbrk(int i);
+int freeRam () {
+  char stack_dummy = 0;
+  return &stack_dummy - sbrk(0);
+}
 
 class floatTuple
 {
@@ -221,47 +227,46 @@ void runADCS(double* Magfield, double* omega, BigNumber Kp, BigNumber Kd) {
 
   BigNumber gyroData[3] = {BigNumber(om1), BigNumber(om2), BigNumber(om3)};
   BigNumber Bvalues[3] = {BigNumber(bom1), BigNumber(bom2), BigNumber(bom3)};
-  
-  BigNumber J[9] = {0,Bvalues[2],BigNumber("-1")*Bvalues[1],BigNumber("-1")*Bvalues[2], 0, Bvalues[0], Bvalues[1], BigNumber("-1")*Bvalues[0], 0};
+  freeRam ();
+  //BigNumber J[9] = {0,Bvalues[2],BigNumber("-1")*Bvalues[1],BigNumber("-1")*Bvalues[2], 0, Bvalues[0], Bvalues[1], BigNumber("-1")*Bvalues[0], 0};
 
   Matrix.Copy((BigNumber*)Bvalues, 1, 3, (BigNumber*)Bfield); // create new field to scale for the pseudo-inverse
   Matrix.Scale((BigNumber*)Bfield, 3, 1, E); // scale duplicated Bfield array with E for pseudo-inverse
 
-  BigNumber Jnew[4][3] = {{J[0], J[1], J[2]},
-    {J[3], J[4], J[5]},
-    {J[6], J[7], J[8]},
+  BigNumber Jnew[4][3] = {0,Bvalues[2],BigNumber("-1")*Bvalues[1],
+    {BigNumber("-1")*Bvalues[2], 0, Bvalues[0]},
+    {Bvalues[1], BigNumber("-1")*Bvalues[0], 0},
     {Bfield[0]*E, Bfield[1]*E, Bfield[2]*E}
   };
-
+  freeRam ();
   BigNumber Jtranspose[3][4];
-  BigNumber Jproduct[3][3];
+  BigNumber Jp[3][3]; // Jproduct here, but Jpseudo-inverse later
   BigNumber Jppinv[3][4];
 
   Matrix.Transpose((BigNumber*)Jnew, 4, 3, (BigNumber*)Jtranspose); // transpose(Jnew)
   Serial.println ("Step 1 complete");
-  Matrix.Multiply((BigNumber*)Jtranspose, (BigNumber*)Jnew, 3, 4, 3, (BigNumber*)Jproduct); //transpose(Jnew)*Jnew=Anew
+  Matrix.Multiply((BigNumber*)Jtranspose, (BigNumber*)Jnew, 3, 4, 3, (BigNumber*)Jp); //transpose(Jnew)*Jnew=Anew
   Serial.println ("Step 2 complete");
-  Matrix.Invert((BigNumber*)Jproduct, 3); // inverse(transpose(Jnew)*Jnew)=Bnew
+  Matrix.Invert((BigNumber*)Jp, 3); // inverse(transpose(Jnew)*Jnew)=Bnew
   Serial.println ("Step 3 complete");
-  Matrix.Multiply((BigNumber*)Jproduct, (BigNumber*)Jtranspose, 3, 3, 4, (BigNumber*)Jppinv); // Bnew*transpose(Jnew)=Cnew
+  Matrix.Multiply((BigNumber*)Jp, (BigNumber*)Jtranspose, 3, 3, 4, (BigNumber*)Jppinv); // Bnew*transpose(Jnew)=Cnew
   Serial.println ("Step 4 complete");
-
-  BigNumber Jpinv[3][3] = {{Jppinv[0][0], Jppinv[0][1], Jppinv[0][2]},
-    {Jppinv[1][0], Jppinv[1][1], Jppinv[1][2]},
-    {Jppinv[2][0], Jppinv[2][1], Jppinv[2][2]}
-  };
-
-  BigNumber current[3][1];
-  BigNumber OmegaError[3][1], BfieldError[3][1], ErrorSum[3][1];
-  BigNumber Omegacmd[3][1] = {0, 0, 1};
-  BigNumber Bcmd[3][1] = {0, 0, 1};
+  // redefine Jp as Jpseudo-inverse
+  Jp[0][0] = Jppinv[0][0]; Jp[0][1] = Jppinv[0][1]; Jp[0][2] = Jppinv[0][2];
+  Jp[1][0] = Jppinv[1][0]; Jp[1][1] = Jppinv[1][1]; Jp[1][2] = Jppinv[1][2];
+  Jp[2][0] = Jppinv[2][0]; Jp[2][1] = Jppinv[2][1]; Jp[2][2] = Jppinv[2][2];
+  
+  freeRam ();
+  BigNumber OmegaError[3], BfieldError[3], ErrorSum[3];
+  BigNumber Omegacmd[3] = {0, 0, 1};
+  BigNumber Bcmd[3] = {0, 0, 1};
   BigNumber A = BigNumber("0.532");
 
   Matrix.Subtract((BigNumber*) Bvalues, (BigNumber*) Bcmd, 3, 1, (BigNumber*) BfieldError);
   Serial.println ("Step 5 complete");
   Matrix.Subtract((BigNumber*) gyroData, (BigNumber*) Omegacmd, 3, 1, (BigNumber*) OmegaError);
   Serial.println ("Step 6 complete");
-
+  freeRam ();
   Matrix.Scale((BigNumber*)BfieldError, 3, 1, Kp / A); // scale error with proportional gain (updates array)
   Serial.println ("Step 7 complete");
   Matrix.Scale((BigNumber*)OmegaError, 3, 1, Kd / A); // scale error with derivative gain (updates array)
@@ -271,10 +276,12 @@ void runADCS(double* Magfield, double* omega, BigNumber Kp, BigNumber Kd) {
   Serial.println ("Step 9 complete");
   Matrix.Scale((BigNumber*) ErrorSum, 3, 1, -1.0); // prep error for multiplication with the Jpinv matrix
   Serial.println ("Step 10 complete");
-  Matrix.Multiply((BigNumber*) Jpinv, (BigNumber*) ErrorSum, 3, 3, 1, (BigNumber*) current);
+  freeRam ();
+  Matrix.Multiply((BigNumber*) Jp, (BigNumber*) ErrorSum, 3, 3, 1, (BigNumber*) ErrorSum);
   Serial.println ("Step 11 complete");
 
-  outputPWM((BigNumber*) current, 3);
+  freeRam ();
+  outputPWM((BigNumber*) ErrorSum, 3);
 }
 
 void outputPWM(BigNumber* I, int length) {
@@ -588,6 +595,12 @@ void loop() {
     lastADCSTime = millis();
     } else {
       //torquers off
+      //analogWrite(CX_PWM, 0);
+      //analogWrite(CY_PWM, 0);
+      //analogWrite(CZ_PWM, 0);
+      //floatTuple PWMvaluesForTorquers = floatTuple(0,0,0;
+      //floatTuple PWMdirectionsForTorquers = floatTuple(0,0,0);
+      //StatusHolder.updateTorquers(PWMdirectionsForTorquers, PWMvaluesForTorquers);
     }
   }
 
