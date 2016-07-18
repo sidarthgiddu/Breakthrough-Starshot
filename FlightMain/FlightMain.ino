@@ -198,7 +198,6 @@ int getImuTempData(Adafruit_LSM9DS0 imu, int wT) {
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-
 class commandBuffer {
   public:
     int commandStack[200][2];
@@ -537,7 +536,7 @@ boolean isInputValid(String input) {
       break;
     }
 
-    //Detect no ending period
+    //Detect no ending exclamation point
     if (q == input.length() - 1) {
       if (input[q] != '!') {
         //Serial.println("No Ending");
