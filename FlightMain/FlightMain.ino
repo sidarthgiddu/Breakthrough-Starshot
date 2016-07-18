@@ -243,7 +243,7 @@ class masterStatus {
     int SlaveWorking;
     int Resets;
     bool PayloadDeployed;
-    
+
 
     bool ADCS_Active;
     int MResets;
@@ -851,8 +851,8 @@ void loop() {
           spinMagnitude = pow(masterStatusHolder.Gyro[i], 2);
         }
         spinMagnitude = sqrt(spinMagnitude);
-        if (spinMagnitude > OmegaThreshold){
-          
+        if (spinMagnitude > OmegaThreshold) {
+
         }
       }
 
@@ -874,50 +874,51 @@ void loop() {
       if (millis() > cruiseEnd) {
         masterStatusHolder.State = INITALIZATION;
         initEntry = millis();
+        initEntry = millis();
       } else {
         delay(10000);
       }
       break;
 
     case (INITALIZATION):
-      EnterINITIALIZATION=millis();
       //Initiate Detumble "41,1!"-->"51,1!"?
-      sendScommand("51,1!");
+      sendSCommand("51,1!");
       //Listen to Status Reports
-      if (Gyro[0]< "" && Gyro [1] < "") {
+      float Gyro[50];
+      if (Gyro[0] < "" && Gyro[1] < "") {
         masterStatusHolder.State = NORM_OPS;
       }
       //Check battery ->> INIT_SLEEP
       if (masterStatusHolder.Battery < LV_Threshold) {
         masterStatusHolder.State = INIT_SLEEP;
       }
-      if (millis()-EnterINITIALIZATION > 2700000){
+      if (millis() - initEntry> (long)2700000) {
         //call downlink function
-        }
+      }
       break;
-      
+
 
     case (INIT_SLEEP):
       //Check Time
-      EnterINIT_SLEEP=millis();
-      if (millis()-EnterINIT_SLEEP> ""){
-        masterStatusHolder.State=INITIALIZATION;
+      EnterINIT_SLEEP = millis();
+      if (millis() - EnterINIT_SLEEP > "") {
+        masterStatusHolder.State = INITIALIZATION;
       }
-         //Check battery ->> INITALIZATION
-      if (masterStatusHolder.Battery > HV_Threshold){
-        masterStatusHolder.State=INITIALIZATION;
+      //Check battery ->> INITALIZATION
+      if (masterStatusHolder.Battery > HV_Threshold) {
+        masterStatusHolder.State = INITIALIZATION;
       }
       break;
 
     case (ECLIPSE):
-      //Check Battery 
+      //Check Battery
       if (masterStatusHolder.Battery < LV_Threshold) {
-          masterStatusHolder.State = LOW_POWER;
+        masterStatusHolder.State = LOW_POWER;
       }
-        //Check Solar Current
+      //Check Solar Current
       float getTotalAmperage[4];
-        //Check Time
-       
+      //Check Time
+
 
       if (getTotalAmperage() > .1 || millis() - eclipseEntry > forceExitEclipseTime) {
         masterStatusHolder.State = NORMAL_OPS;
@@ -928,69 +929,69 @@ void loop() {
       break;
 
     case (DEPLOY_ARMED):
-      sendSCommand(char data[61,1!])  //Prep Camera
+      sendSCommand(char data[61, 1!]) //Prep Camera
       float IMU[360]; //memory to measure once a sec for 6 min
       float LIGHT [60]; //memory to measure light every 10 seconds
       float Acceldata[];
-      digitalWrite(24,HIGH); //Activate Nichrome
-      bool DoorOpen = false
-      for (int j=0; j<Acceldata,length (), j++) //Wait for DoorSensor, check for spikes in accelerometer
-        if Acceldata[j] > "" || (DoorSens == LOW);
-        DoorOpen=true;
-        sendSCommand() ;//Trigger Camera
-        masterStatusHolder.DoorSense == 1;
-        digitalWrite(24,LOW); 
-        
-        break
-      else 
-      delay(60000) //wait one minute
-      sendSCommand() ;// if nothing happens in one minute Trigger Camera
-      delay(360000); //wait another 6 minutes until disabling door trigger
-      digitalWrite(24,LOW);
-=======
-        MasterStatusHoler.State = DEPLOY_VERIF;
-        }
-        break
-        else {
-        delay(60000) //wait one minute
-        sendSCommand() ;// if nothing happens in one minute start taking pictures
-        delay(360000); //wait another 6 minutes until disabling door trigger
-        digitalWrite(24,LOW);
-        MasterStatusHoler.State = DEPLOY_VERIF;
-        }
->>>>>>> c302939f00efa64548dee68ab9704c06592dae13
-      break;
+      digitalWrite(24, HIGH); //Activate Nichrome
+      bool DoorOpen = false;
+                      for (int j = 0; j < Acceldata, length (), j++) //Wait for DoorSensor, check for spikes in accelerometer
+                        if Acceldata[j] > "" || (DoorSens == LOW);
+      DoorOpen = true;
+      sendSCommand() ;//Trigger Camera
+      masterStatusHolder.DoorSense == 1;
+      digitalWrite(24, LOW);
 
-    case (DEPLOY_VERIF):
-      buildBuffer(requestFromSlave());
-      if (LightSens > " " ) //LightSensor Trigger
-        masterStatusHolder.PayloadDeployed == true;  
+      break
       else
-        masterStatusHolder.PayloadDeployed == false; 
-      break;
-
-    case (DEPLOY_DOWN_LK):
-      //Upon Request Downlink Image
-      //Downlink Data
-      break;
-
-    case (LOW_POWER):
-      masterStatusHolder.updateSensors(imuSensorDwell);
-      if (masterStatusHolder.Battery * 2 >= HV_Threshold) {
-        masterStatusHolder.State = NORMAL_OPS;
-      } else {
-        delay(10000);
-      }
-      break;
-
-    case (SAFE_MODE):
-      //No Idea
-      break;
+        delay(60000) //wait one minute
+        sendSCommand() ;// if nothing happens in one minute Trigger Camera
+      delay(360000); //wait another 6 minutes until disabling door trigger
+      digitalWrite(24, LOW);
+      == == == =
+        MasterStatusHoler.State = DEPLOY_VERIF;
   }
-  //Testing Iterators
-  cycle++;
-  //Serial.print("C: ");
-  //Serial.println(cycle);
+  break
+  else {
+    delay(60000) //wait one minute
+    sendSCommand() ;// if nothing happens in one minute start taking pictures
+    delay(360000); //wait another 6 minutes until disabling door trigger
+    digitalWrite(24, LOW);
+    MasterStatusHoler.State = DEPLOY_VERIF;
+  }
+  >>> >>> > c302939f00efa64548dee68ab9704c06592dae13
+  break;
+
+case (DEPLOY_VERIF):
+  buildBuffer(requestFromSlave());
+  if (LightSens > " " ) //LightSensor Trigger
+    masterStatusHolder.PayloadDeployed == true;
+  else
+    masterStatusHolder.PayloadDeployed == false;
+  break;
+
+case (DEPLOY_DOWN_LK):
+  //Upon Request Downlink Image
+  //Downlink Data
+  break;
+
+case (LOW_POWER):
+  masterStatusHolder.updateSensors(imuSensorDwell);
+  if (masterStatusHolder.Battery * 2 >= HV_Threshold) {
+    masterStatusHolder.State = NORMAL_OPS;
+  } else {
+    delay(10000);
+  }
+  break;
+
+case (SAFE_MODE):
+  //No Idea
+  break;
+}
+//Testing Iterators
+cycle++;
+//Serial.print("C: ");
+//Serial.println(cycle);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////
