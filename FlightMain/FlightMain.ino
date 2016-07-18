@@ -250,10 +250,10 @@ class masterStatus {
     int Resets;
     bool PayloadDeployed;
 
+
     float * IMUData[3];
     float * LIGHTData;
     int dataIndex;
-
 
     bool ADCS_Active;
     int MResets;
@@ -871,6 +871,12 @@ void loop() {
           if (spinMagnitude > OmegaThreshold) {
             sendSCommand("91,1!"); //Activate Torquers
           }
+
+          spinMagnitude = sqrt(spinMagnitude);
+          if (spinMagnitude > OmegaThreshold) {
+            //Command Detumble
+
+          }
         }
 
         //Eclipse Detection
@@ -932,6 +938,7 @@ void loop() {
       break;
 
     case (ECLIPSE):
+
       {
         //Check Battery
         //Check Solar Current
@@ -951,31 +958,32 @@ void loop() {
           delay(10000);
         }
         break;
+
       }
 
-      case (DEPLOY_ARMED):
-        if (deployArmedEntry - millis() < 20) {
-          char data[] = {'6', '1', ',', '1', '!'};
-          sendSCommand(data); //Prep Camera
-          digitalWrite(24, HIGH); //Activate Nichrome
-        }
-        //for (int j = 0; j < Acceldata.length(), j++) { //Wait for DoorSensor, check for spikes in accelerometer
-        if (masterStatusHolder.DoorSense == LOW) { //Acceldata[j] > "" ||
-          //Door is open
-          //sendSCommand(); //Trigger Camera
+    case (DEPLOY_ARMED):
+      if (deployArmedEntry - millis() < 20) {
+        char data[] = {'6', '1', ',', '1', '!'};
+        sendSCommand(data); //Prep Camera
+        digitalWrite(24, HIGH); //Activate Nichrome
+      }
+      //for (int j = 0; j < Acceldata.length(), j++) { //Wait for DoorSensor, check for spikes in accelerometer
+      if (masterStatusHolder.DoorSense == LOW) { //Acceldata[j] > "" ||
+        //Door is open
+        //sendSCommand(); //Trigger Camera
+        digitalWrite(DoorTrig, LOW);
+        masterStatusHolder.NextState = DEPLOY_VERIF;
+        deployVEntry = millis();
+
+      } else {
+        if (millis() - deployArmedEntry > (long)60 * 6 * 1000) {
           digitalWrite(DoorTrig, LOW);
-          masterStatusHolder.NextState = DEPLOY_VERIF;
-          deployVEntry = millis();
-
-        } else {
-          if (millis() - deployArmedEntry > (long)60 * 6 * 1000) {
-            digitalWrite(DoorTrig, LOW);
-            //Notifiy of failure
-          }
+          //Notifiy of failure
         }
+      }
 
-        break;
-      
+      break;
+
 
     case (DEPLOY_VERIF):
       {
