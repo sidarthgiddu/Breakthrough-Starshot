@@ -130,13 +130,8 @@ class slaveStatus
       res += "!68," + String(CurYPWM);
       res += "!69," + String(CurZPWM);
       res += "!610," + String(numPhotos);
-<<<<<<< HEAD
-      res += "!"
-             return res;
-=======
       res += "!";
       return res;
->>>>>>> 467bdeb886bbf0e5a006c84045af8b0b2498f34b
     }
     void print() {
       Serial.println(toString());
@@ -184,35 +179,19 @@ class commandBuffer {
 };
 commandBuffer cBuf;
 
-<<<<<<< HEAD
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-BigNumber mass = 1.33;
-BigNumber zero = 0.0, six = 6.0;
-=======
 ////////////////////////////////
 ////////////////////////////////
-////////////////////////////////========================= ADCS DATA ==========================================================================
+////////////////////////////////
+//========================= ADCS DATA ===================================================================
 BigNumber mass = "1.33";
 BigNumber zero = 0, six = 6;
->>>>>>> 467bdeb886bbf0e5a006c84045af8b0b2498f34b
 BigNumber Bfield[3];
 BigNumber w[3];
 BigNumber Inertia[3][3] = {{mass / six, zero, zero},
   {zero, mass / six, zero},
   {zero, zero, mass / six}
 }; // Inertia initialization
-<<<<<<< HEAD
-BigNumber E = 1e-4;
 
-void runADCS(float* Magfield, float* omega, BigNumber Kp, BigNumber Kd) {
-  BigNumber gyroData[3] = {omega[0], omega[1], omega[2]};
-  BigNumber Bvalues[3] = {Magfield[0], Magfield[1], Magfield[2]};
-
-  BigNumber J[9] = {0, Bvalues[2], -Bvalues[1], -Bvalues[2], 0, Bvalues[0], Bvalues[1], -Bvalues[0], 0};
-=======
 BigNumber E = BigNumber("0.0001");
 
 void runADCS(double* Magfield, double* omega, BigNumber Kp, BigNumber Kd) {
@@ -243,7 +222,6 @@ void runADCS(double* Magfield, double* omega, BigNumber Kp, BigNumber Kd) {
   BigNumber Bvalues[3] = {BigNumber(bom1), BigNumber(bom2), BigNumber(bom3)};
   
   BigNumber J[9] = {0,Bvalues[2],BigNumber("-1")*Bvalues[1],BigNumber("-1")*Bvalues[2], 0, Bvalues[0], Bvalues[1], BigNumber("-1")*Bvalues[0], 0};
->>>>>>> 467bdeb886bbf0e5a006c84045af8b0b2498f34b
 
   Matrix.Copy((BigNumber*)Bvalues, 1, 3, (BigNumber*)Bfield); // create new field to scale for the pseudo-inverse
   Matrix.Scale((BigNumber*)Bfield, 3, 1, E); // scale duplicated Bfield array with E for pseudo-inverse
@@ -299,15 +277,9 @@ void runADCS(double* Magfield, double* omega, BigNumber Kp, BigNumber Kd) {
 }
 
 void outputPWM(BigNumber* I, int length) {
-<<<<<<< HEAD
-  float Imax = 2.0;
-  String I1 = I[0].toString();
-  String I2 = I[1].toString();
-=======
   float Imax = 0.2;
   String I1 = I[0].toString(); 
   String I2 = I[1].toString(); 
->>>>>>> 467bdeb886bbf0e5a006c84045af8b0b2498f34b
   String I3 = I[2].toString();
   float If[3] = {I1.toFloat(), I2.toFloat(), I3.toFloat()};
   free (&I[0]);
@@ -604,17 +576,16 @@ void loop() {
   StatusHolder.updatePassive();
 
   //Test ADCS
-<<<<<<< HEAD
   if (StatusHolder.ADCS_Active && millis() - lastADCSTime >= 3000) {
-    if (!(millis() - lastADCSTime >= 3000
-=======
-  if (millis() - lastADCSTime >= 2000) {
->>>>>>> 467bdeb886bbf0e5a006c84045af8b0b2498f34b
+    if (millis() - lastADCSTime >= 3100){
     runADCS(mData, gData, Kp, Kd); //placeholders
     Serial.print("X axis: "); Serial.print(StatusHolder.CurXDir, 20); Serial.print(" "); Serial.println(StatusHolder.CurXPWM, 20);
     Serial.print("Y axis: "); Serial.print(StatusHolder.CurYDir, 20); Serial.print(" "); Serial.println(StatusHolder.CurYPWM, 20);
     Serial.print("Z axis: "); Serial.print(StatusHolder.CurZDir, 20); Serial.print(" "); Serial.println(StatusHolder.CurZPWM, 20);
     lastADCSTime = millis();
+    } else {
+      //torquers off
+    }
   }
 
   //Reset Master if No Communication for 5 min
@@ -639,7 +610,6 @@ void loop() {
     ledLastTime = millis();
   }
 
-  if(
 
 }
 
