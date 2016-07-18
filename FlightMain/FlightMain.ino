@@ -250,6 +250,7 @@ class masterStatus {
     int SlaveWorking;
     int Resets;
     bool PayloadDeployed;
+    int missionStatus; //0=incomplete, 1=success, 2=failure
 
 
     float * IMUData[3];
@@ -273,7 +274,7 @@ class masterStatus {
                  float SolarZP = 0, float SolarZM = 0, int DS = 0, float LS = 0,
                  float AT = 0, int nP = 0, bool IMUW = true, bool SW = true, int R = 0, int MR = 0,
                  int XD = 0, int XP = 0, int YD = 0, int YP = 0, int ZD = 0, int ZP = 0, bool ADCS = false,
-                 bool pd = false) {
+                 bool pd = false, int mS=0 ) {
 
       State = S;
       NextState = State;
@@ -296,6 +297,7 @@ class masterStatus {
       IMUWorking = IMUW;
       SlaveWorking = SW;
       Resets = R;
+      missionStatus=mS;
 
       ADCS_Active = ADCS;
       MResets = MR;
@@ -982,7 +984,7 @@ void loop() {
       } else {
         if (millis() - deployArmedEntry > (long)60 * 6 * 1000) {
           digitalWrite(DoorTrig, LOW);
-          //Notifiy of failure
+          masterStatusHolder.missionStatus=3;
         }
       }
 
@@ -990,7 +992,6 @@ void loop() {
 
 
     case (DEPLOY_VERIF):
-      float accel[40];
       buildBuffer(requestFromSlave());
       lastAccelTime = millis();
 
@@ -1002,16 +1003,15 @@ void loop() {
         lastAccelTime = millis();
         masterStatusHolder.accelIndex++;
       }
-
-
-      //      if (LightSens > " " ){ //LightSensor Trigger
-      //        masterStatusHolder.PayloadDeployed == true;
-      //        }
-      //      else {
-      //        masterStatusHolder.PayloadDeployed == false;
-      //        }
+      if (masterStatusHolder.LightSense > placeHolderLightSense ){ //LightSensor Trigger
+        masterStatusHolder.PayloadDeployed == true;
+        masterStatusHolder.missionStatus=2;
+        }
+      else {
+        masterStatusHolder.PayloadDeployed == false;
+        }
   
-  break;
+    break;
 
 case (DEPLOY_DOWN_LK): {
     //Upon Request Downlink Image
