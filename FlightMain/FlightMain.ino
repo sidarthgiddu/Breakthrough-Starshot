@@ -879,6 +879,7 @@ void loop() {
         //Eclipse Detection
         if (getTotalAmperage() < EclipseAmp_Threshold) {
           masterStatusHolder.NextState = ECLIPSE;
+          //torquers off
           eclipseEntry = millis();
         }
         //Low Power Detection
@@ -952,7 +953,7 @@ void loop() {
         //Check Solar Current
         //Check Time
         //Magtorquers off?
-        //Check Battery
+        
         if (masterStatusHolder.Battery < LV_Threshold) {
           masterStatusHolder.NextState = LOW_POWER;
         }
