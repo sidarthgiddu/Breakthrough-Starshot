@@ -58,8 +58,7 @@ int TakePic() {
 
   return jpglen;
 }
-
-uint16_t WritePic(File imgFile, uint16_t jpglen) {
+File WritePic(File imgFile, uint16_t jpglen) {
 
   
   while (jpglen > 0) {
@@ -68,7 +67,7 @@ uint16_t WritePic(File imgFile, uint16_t jpglen) {
 
     //imgFile = SD.open(filename, FILE_WRITE);
 
-    uint8_t bytesToRead = min(32, jpglen);
+    uint8_t bytesToRead = min(64, jpglen);
     Serial.print("bytesToRead");
     Serial.println(bytesToRead);
     Serial.println("Goin' through the buffer...");
@@ -89,7 +88,7 @@ uint16_t WritePic(File imgFile, uint16_t jpglen) {
     Serial.print(jpglen, DEC);
     Serial.println("bytes left to read.");
   }
-  return jpglen;
+  return jpglen, imgFile;
 }
 
 char * makeFilename() {
@@ -142,7 +141,7 @@ void loop() {
     }
     else {
       Serial.println("Writing picture...");
-      jpglen = WritePic(imgFile, jpglen);
+      jpglen, imgFile = WritePic(imgFile, jpglen);
       //needs #of bytes to read and write and the file to write them in
       //If there is a picture, write picture to SD card
       Serial.println("Wrote pic.");
