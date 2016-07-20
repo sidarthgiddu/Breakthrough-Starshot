@@ -1,6 +1,5 @@
 #include <Wire.h>
-#include <BigNumber.h>
-#include <MatrixMath.h>
+#include <MatrixMathDOUBLE.h>
 
 ////Constant Initialization
 bool TestReset = false;
@@ -85,6 +84,7 @@ class floatTuple
       Serial.print(y); Serial.print(" ");
       Serial.print(z); Serial.println(" ");
     }
+    
 };
 
 class slaveStatus
@@ -188,150 +188,133 @@ commandBuffer cBuf;
 ////////////////////////////////
 ////////////////////////////////
 ////////////////////////////////
-//========================= ADCS DATA ===================================================================
-BigNumber mass = "1.33";
-BigNumber zeroMain = 0, six = 6;
-BigNumber Bfield[3];
-BigNumber w[3];
-BigNumber Inertia[3][3] = {{mass / six, zeroMain, zeroMain},
+////======================================== ADCS DATA ===================================================================
+double mass = 1.33;
+double zeroMain = 0.0, six = 6.0;
+double Bfield[3];
+double w[3];
+double Inertia[3][3] = {{mass / six, zeroMain, zeroMain},
   {zeroMain, mass / six, zeroMain},
   {zeroMain, zeroMain, mass / six}
 }; // Inertia initialization
 
-BigNumber E = BigNumber("0.0001");
+double E = 1; //0.0001;
 
-void runADCS(double* Magfield, double* omega, BigNumber Kp, BigNumber Kd) {
-  //BigNumber::scale_ = 20;
-  String sx = String(omega[0], 12);
-  String sy = String(omega[1], 12);
-  String sz = String(omega[2], 12);
-  char om1[sx.length()];
-  sx.toCharArray(om1, sx.length());
-  char om2[sy.length()];
-  sy.toCharArray(om2, sy.length());
-  char om3[sz.length()];
-  sz.toCharArray(om3, sz.length());
+void runADCS(double* Bvalues, double* gyroData, double Kp, double Kd) {
 
-  String bx = String(Magfield[0], 12);
-  String by = String(Magfield[1], 12);
-  String bz = String(Magfield[2], 12);
-  char bom1[bx.length()];
-  bx.toCharArray(bom1, bx.length());
-  char bom2[by.length()];
-  by.toCharArray(bom2, by.length());
-  char bom3[bz.length()];
-  bz.toCharArray(bom3, bz.length());
-
-  BigNumber gyroData[3] = {BigNumber(om1), BigNumber(om2), BigNumber(om3)};
-  BigNumber Bvalues[3] = {BigNumber(bom1), BigNumber(bom2), BigNumber(bom3)};
   //////////////freeRam ();
-  //BigNumber J[9] = {0,Bvalues[2],BigNumber("-1")*Bvalues[1],BigNumber("-1")*Bvalues[2], 0, Bvalues[0], Bvalues[1], BigNumber("-1")*Bvalues[0], 0};
-
-  Matrix.Copy((BigNumber*)Bvalues, 1, 3, (BigNumber*)Bfield); // create new field to scale for the pseudo-inverse
-  Matrix.Scale((BigNumber*)Bfield, 3, 1, E); // scale duplicated Bfield array with E for pseudo-inverse
-
-  BigNumber Jnew[4][3] = {0, Bvalues[2], BigNumber("-1")*Bvalues[1],
-    {BigNumber("-1")*Bvalues[2], 0, Bvalues[0]},
-    {Bvalues[1], BigNumber("-1")*Bvalues[0], 0},
-    {Bfield[0]*E, Bfield[1]*E, Bfield[2]*E}
+  //double J[9] = {0,Bvalues[2],(-1.0)*Bvalues[1],(-1.0)*Bvalues[2], 0, Bvalues[0], Bvalues[1], (-1.0)*Bvalues[0], 0};
+  
+  Matrix.Print((double*)Bvalues, 3, 1, "Magn");
+  Matrix.Print((double*)gyroData, 3, 1, "Gyro");
+  
+  Matrix.Copy((double*)Bvalues, 1, 3, (double*)Bfield); // create new field to scale for the pseudo-inverse
+  //Matrix.Scale((double*)Bfield, 3, 1, E); // scale duplicated Bfield array with E for pseudo-inverse
+  //Matrix.Print((double*)Bfield, 3, 1, "Scaled Bfield");
+  double Jnew[4][3] = {0, Bvalues[2], (-1.0)*Bvalues[1],
+    {(-1.0)*Bvalues[2], 0, Bvalues[0]},
+    {Bvalues[1], (-1.0)*Bvalues[0], 0},
+    {Bfield[0], Bfield[1], Bfield[2]}
   };
   ////Serial.println(freeRam ());
-  BigNumber Jtranspose[3][4];
-  BigNumber Jp[3][3]; // Jproduct here, but Jpseudo-inverse later
-  BigNumber Jppinv[3][4];
+  double Jtranspose[3][4];
+  double Jp[3][3]; // Jproduct here, but Jpseudo-inverse later
+  double Jppinv[3][4];
 
-  Matrix.Transpose((BigNumber*)Jnew, 4, 3, (BigNumber*)Jtranspose); // transpose(Jnew)
+  Matrix.Transpose((double*)Jnew, 4, 3, (double*)Jtranspose); // transpose(Jnew)
   Serial.println ("Step 1 complete");
-  Matrix.Multiply((BigNumber*)Jtranspose, (BigNumber*)Jnew, 3, 4, 3, (BigNumber*)Jp); //transpose(Jnew)*Jnew=Anew
+  Matrix.Multiply((double*)Jtranspose, (double*)Jnew, 3, 4, 3, (double*)Jp); //transpose(Jnew)*Jnew=Anew
   Serial.println ("Step 2 complete");
-  Matrix.Invert((BigNumber*)Jp, 3); // inverse(transpose(Jnew)*Jnew)=Bnew
+  Matrix.Invert((double*)Jp, 3); // inverse(transpose(Jnew)*Jnew)=Bnew
   Serial.println ("Step 3 complete");
-  Matrix.Multiply((BigNumber*)Jp, (BigNumber*)Jtranspose, 3, 3, 4, (BigNumber*)Jppinv); // Bnew*transpose(Jnew)=Cnew
+  Matrix.Multiply((double*)Jp, (double*)Jtranspose, 3, 3, 4, (double*)Jppinv); // Bnew*transpose(Jnew)=Cnew
   Serial.println ("Step 4 complete");
-  BigNumber tiny = "0.000001";
+  
   // redefine Jp as Jpseudo-inverse
-  Jp[0][0] = Jppinv[0][0] * tiny; Jp[0][1] = Jppinv[0][1] * tiny; Jp[0][2] = Jppinv[0][2] * tiny; // rescaled up
-  Jp[1][0] = Jppinv[1][0] * tiny; Jp[1][1] = Jppinv[1][1] * tiny; Jp[1][2] = Jppinv[1][2] * tiny;
-  Jp[2][0] = Jppinv[2][0] * tiny; Jp[2][1] = Jppinv[2][1] * tiny; Jp[2][2] = Jppinv[2][2] * tiny;
-
+  Jp[0][0] = Jppinv[0][0]; Jp[0][1] = Jppinv[0][1]; Jp[0][2] = Jppinv[0][2]; // rescaled up
+  Jp[1][0] = Jppinv[1][0]; Jp[1][1] = Jppinv[1][1]; Jp[1][2] = Jppinv[1][2];
+  Jp[2][0] = Jppinv[2][0]; Jp[2][1] = Jppinv[2][1]; Jp[2][2] = Jppinv[2][2];
+  Matrix.Scale((double*)Jp,3,3,1000000.0);
   //////////////Serial.println(freeRam ());
-  BigNumber OmegaError[3], BfieldError[3], ErrorSum[3];
-  BigNumber Omegacmd[3] = {0, 0, 1};
-  BigNumber Bcmd[3] = {0, 0, 1};
-  BigNumber A = BigNumber("0.532");
-  Matrix.Scale((BigNumber*)BfieldError, 3, 1, tiny * tiny);
-  Matrix.Subtract((BigNumber*) Bvalues, (BigNumber*) Bcmd, 3, 1, (BigNumber*) BfieldError);
+  double OmegaError[3], BfieldError[3], ErrorSum[3], current[3];
+  double Omegacmd[3] = {0, 0, 1};
+  double Bmagnitude = sqrt(Bvalues[0]*Bvalues[0]+Bvalues[1]*Bvalues[1]+Bvalues[2]*Bvalues[2]);
+  double Bcmd[3] = {0, 0, 1};
+  double A = 0.532;
+  
+  Matrix.Scale((double*)Bfield, 3, 1, 1/Bmagnitude);
+  
+  Matrix.Subtract((double*) Bfield, (double*) Bcmd, 3, 1, (double*) BfieldError);
   Serial.println ("Step 5 complete");
-  Matrix.Subtract((BigNumber*) gyroData, (BigNumber*) Omegacmd, 3, 1, (BigNumber*) OmegaError);
+  Matrix.Subtract((double*) gyroData, (double*) Omegacmd, 3, 1, (double*) OmegaError);
   Serial.println ("Step 6 complete");
   //////////////Serial.println(freeRam ());
-  Matrix.Scale((BigNumber*)BfieldError, 3, 1, Kp / A); // scale error with proportional gain (updates array)
+  
+  Matrix.Scale((double*)BfieldError, 3, 1, (Kp/A)); // scale error with proportional gain (updates array)
+  
   Serial.println ("Step 7 complete");
-  Matrix.Scale((BigNumber*)OmegaError, 3, 1, Kd / A); // scale error with derivative gain (updates array)
+  Matrix.Scale((double*)OmegaError, 3, 1, (Kd/A)); // scale error with derivative gain (updates array)
   Serial.println ("Step 8 complete");
 
-  Matrix.Add((BigNumber*)BfieldError, (BigNumber*)OmegaError, 3, 1, (BigNumber*) ErrorSum);
+  Matrix.Add((double*)BfieldError, (double*)OmegaError, 3, 1, (double*) ErrorSum);
   Serial.println ("Step 9 complete"); delay(50);
-  Matrix.Scale((BigNumber*) ErrorSum, 3, 1, -1.0); // prep error for multiplication with the Jpinv matrix
+  Matrix.Scale((double*) ErrorSum, 3, 1, -1.0); // prep error for multiplication with the Jpinv matrix
   Serial.println ("Step 10 complete"); delay(50);
-  //Matrix.Print((BigNumber*)Jp, 3, 3, "J pseudo inverse");
-  Serial.println(freeRam ()); delay(50);
-  Matrix.Multiply((BigNumber*) Jp, (BigNumber*) ErrorSum, 3, 3, 1, (BigNumber*) ErrorSum);
-  Serial.println ("Step 11 complete");
 
+  Matrix.Print((double*)ErrorSum, 3, 1, "MATRIX TO CHECK");
+  Matrix.Print((double*)Jp, 3, 3, "Jpinv");
+  
+  Serial.println(freeRam ()); delay(50);
+  Matrix.Multiply((double*) Jp, (double*) ErrorSum, 3, 3, 1, (double*) current);
+  Serial.println ("Step 11 complete");
+  
   //////////////Serial.println(freeRam ());
   //delete (Jp); delete  (Jtranspose); delete  (Jppinv);
   //delete (gyroData); delete (Bvalues); delete (Jnew);
   //delete (OmegaError); delete (BfieldError); delete (Omegacmd); delete (Bcmd);
   Serial.println("Calling outputPWM"); delay(50);
-  outputPWM((BigNumber*) ErrorSum, 3);
+  Matrix.Print((double*)current, 3, 1, "Current");
+  outputPWM((double*) current, 3);
   Serial.println("outputPWM ran"); delay(50);
-  delete (ErrorSum);
+  //delete (ErrorSum);
 }
 
-void outputPWM(BigNumber* I, int length) {
+void outputPWM(double* I, int length) {
   float Imax = 0.2;
-  String I1 = I[0].toString();
-  String I2 = I[1].toString();
-  String I3 = I[2].toString();
-  float If[3] = {I1.toFloat(), I2.toFloat(), I3.toFloat()};
+  //String I1 = I[0].toString();
+  //String I2 = I[1].toString();
+  //String I3 = I[2].toString();
+  //float If[3] = {I1.toFloat(), I2.toFloat(), I3.toFloat()};
   //delete I,I1,I2,I3;
 
   for (int i = 0; i < length; i++) {
-    if (abs(If[i]) > Imax) {
+    if (abs(I[i]) > Imax) {
       Serial.println("saturated");
-      If[i] = Imax * sgn(If[i]);
+      I[i] = Imax * sgn(I[i]);
     }
-    Serial.print(If[i]); Serial.println(" ");
+    Serial.print(I[i]); Serial.println(" ");
   }
 
   // CREATE PWM OUT SIGNAL
-  //analogWrite(CX_PWM, If[1] / Imaxf * 255);
-  //analogWrite(CY_PWM, If[2] / Imaxf * 255);
-  //analogWrite(CZ_PWM, If[3] / Imaxf * 255);
+  //analogWrite(CX_PWM, I[0] / Imaxf * 255);
+  //analogWrite(CY_PWM, I[1] / Imaxf * 255);
+  //analogWrite(CZ_PWM, I[2] / Imaxf * 255);
 
-  floatTuple PWMvaluesForTorquers = floatTuple(If[1] / Imax * 255, If[2] / Imax * 255, If[3] / Imax * 255);
-  floatTuple PWMdirectionsForTorquers = floatTuple(sgn(If[0]), sgn(If[1]), sgn(If[2]));
+  floatTuple PWMvaluesForTorquers = floatTuple(I[0] / Imax * 255, I[1] / Imax * 255, I[2] / Imax * 255);
+  floatTuple PWMdirectionsForTorquers = floatTuple(sgn(I[0]), sgn(I[1]), sgn(I[2]));
   StatusHolder.updateTorquers(PWMdirectionsForTorquers, PWMvaluesForTorquers);
 }
 
-void printBignum (BigNumber n)
-{
-  char * s = n.toString ();
-  Serial.println (s);
-  free (s);
-}  // end of printBignum
-
-static inline float sgn(float val) {
+static inline double sgn(double val) {
   if (val < 0.0) return -1.0;
   if (val == 0.0) return 0.0;
   return 1.0;
 }
 // Placeholder Test Data
 double gData[3] = {0.2, 0.04, -0.1};
-double mData[3] = {0.002, 0.004, -0.9}; //in 1000s of nT (or *10^3 nT)
-BigNumber Kp = "0.001";
-BigNumber Kd = "0.001";
+double mData[3] = {28.87,28.87,28.87}; //in 1000s of nT (or *10^3 nT)
+double Kp = 0.001;
+double Kd = 0.001;
 
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -552,8 +535,6 @@ void forcedStall() {
 void setup() {
   Serial.begin(9600);
   delay(1000);
-  BigNumber:: begin (14);
-  //BigNumber:: setScale(25);
 
   initalizePinOut();
   slaveStatus StatusHolder = slaveStatus();
@@ -583,9 +564,8 @@ long lastADCSTime = 0;
 void loop() {
 
   StatusHolder.updatePassive(); StatusHolder.ADCS_Active = true;
-  //Test ADCS
+ //Test ADCS
   if (StatusHolder.ADCS_Active && millis() - lastADCSTime >= 2000) {
-
     if (millis() - lastADCSTime >= 2100) {
       Serial.println("happy");
       runADCS(mData, gData, Kp, Kd); //placeholders
