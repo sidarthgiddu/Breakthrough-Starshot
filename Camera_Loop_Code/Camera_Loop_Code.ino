@@ -54,38 +54,41 @@ int TakePic() {
   }
   uint16_t jpglen = cam.frameLength();
 
-  Serial.println(cam.takePicture());
+  //Serial.println(cam.takePicture());
 
   return jpglen;
 }
 
 uint16_t WritePic(File imgFile, uint16_t jpglen) {
-  Serial.println("I'm in the WritePic func..");
-  // Open the file for writing
 
-  //imgFile = SD.open(filename, FILE_WRITE);
-
-  uint8_t bytesToRead = min(64, jpglen);
-  Serial.print("bytesToRead");
-  Serial.println(bytesToRead);
-  Serial.println("Goin' through the buffer...");
-  uint8_t *buffer; //pointer. tells you that the buffer thing later should have 8 bits?
-  buffer = cam.readPicture(bytesToRead); //buffer is the current 64 bytes (or less) of the picture
-  Serial.print("wrote :");
-  int x = imgFile.write(buffer, bytesToRead);
-  delay(100);
   
-  if (x>0){
-    digitalWrite(8,HIGH);
-    delay(5);
-    digitalWrite(8,LOW);
-  }
-  Serial.println(x); //write those 64 (or less) bytes of the picture to the image file
-  Serial.println("I am writing to imgFile...");
-  jpglen -= bytesToRead;
-  Serial.print(jpglen, DEC);
-  Serial.println("bytes left to read.");
+  while (jpglen > 0) {
+    Serial.println("I'm in the WritePic func..");
+    // Open the file for writing
 
+    //imgFile = SD.open(filename, FILE_WRITE);
+
+    uint8_t bytesToRead = min(32, jpglen);
+    Serial.print("bytesToRead");
+    Serial.println(bytesToRead);
+    Serial.println("Goin' through the buffer...");
+    uint8_t *buffer; //pointer. tells you that the buffer thing later should have 8 bits?
+    buffer = cam.readPicture(bytesToRead); //buffer is the current 64 bytes (or less) of the picture
+    Serial.print("wrote :");
+    int x = imgFile.write(buffer, bytesToRead);
+    delay(100);
+
+    if (x > 0) {
+      digitalWrite(8, HIGH);
+      delay(5);
+      digitalWrite(8, LOW);
+    }
+    Serial.println(x); //write those 64 (or less) bytes of the picture to the image file
+    Serial.println("I am writing to imgFile...");
+    jpglen -= bytesToRead;
+    Serial.print(jpglen, DEC);
+    Serial.println("bytes left to read.");
+  }
   return jpglen;
 }
 
@@ -152,8 +155,8 @@ void loop() {
     digitalWrite(13, LOW);
     delay(2000);
 
-//    Serial.print("Number of photos:");
-//    Serial.println(numPhoto);
+    //    Serial.print("Number of photos:");
+    //    Serial.println(numPhoto);
 
   }
 }
