@@ -56,7 +56,7 @@ int TakePic() {
 
   Serial.println(cam.takePicture());
 
-  return jpglen, cam.takePicture();
+  return jpglen;
 }
 
 uint16_t WritePic(File imgFile, uint16_t jpglen) {
