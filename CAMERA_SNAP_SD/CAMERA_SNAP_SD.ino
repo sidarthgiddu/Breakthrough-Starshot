@@ -10,7 +10,6 @@ void setup() {
   Serial.begin(9600);
 
   delay(3000);
-  Serial.println("Wazaaap");
   
     if (cam.begin()) {
     Serial.println("Camera Found:");
@@ -25,7 +24,6 @@ void setup() {
     // don't do anything more:
     return;
   }
-  delay(1000);
   TakePic();
   cam.begin();
   TakePic();
@@ -42,17 +40,16 @@ void TakePic() {
   uint8_t imgsize = cam.getImageSize();
 
   Serial.println("Snapping...");
-  delay(800);
 
   if (! cam.takePicture())
     Serial.println("Failed to snap!");
   else
     Serial.println("Picture taken!");
 
-  // Create an image with the name IMAGExx.JPG
+  // Create an image with the name IMAGExx.JPG //ALTER THIS TO STORE THE NEXT AVAILABLE FILENAME
   char filename[13];
   strcpy(filename, "IMAGE000.JPG");
-  for (int i = 0; i < 500; i++) {
+  for (int i = 0; i < 200; i++) {
     filename[5] = '0' + i / 100;
     filename[6] = '0' + i % 100/10;
     filename[7] = '0' + i % 100 % 10;
