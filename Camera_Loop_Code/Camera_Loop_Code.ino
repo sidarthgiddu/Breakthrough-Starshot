@@ -65,7 +65,7 @@ File WritePic(File imgFile, uint16_t jpglen) {
     Serial.println("I'm in the WritePic func..");
     // Open the file for writing
 
-    //imgFile = SD.open(filename, FILE_WRITE);
+    imgFile = SD.open(filename, FILE_WRITE);
 
     uint8_t bytesToRead = min(64, jpglen);
     Serial.print("bytesToRead");
