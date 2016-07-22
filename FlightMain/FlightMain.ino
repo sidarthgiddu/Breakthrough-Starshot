@@ -109,7 +109,7 @@ const int SlaveReset = 10; //Slave Fault Handing (via Hard Reset)
 const int DoorMagEnable = 11; //Allow Door Magnetorquer to work
 
 //Downlink Test Placeholders
-long DLTime = 6000;
+long DLTime = 6005;
 long lastDLTime = 0;
 float placeHolderBattery = 0.3;
 float placeHolderSolarXPlus = .1;
