@@ -14,7 +14,6 @@
 #else
 #include "WProgram.h"
 #endif
-#include <BigNumber.h>
 
 class MatrixMathDOUBLE
 {

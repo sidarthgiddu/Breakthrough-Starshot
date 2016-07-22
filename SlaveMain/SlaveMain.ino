@@ -137,6 +137,12 @@ class slaveStatus
     unsigned long burstStart;
     unsigned long burstDuration;
 
+    //Iridium Network Status Attributes
+
+
+
+    
+
     slaveStatus(float t = 0, int L = 0, int r = 0, int n = 0, int XD = 0, int XP = 0,
                 int YD = 0, int YP = 0, int ZD = 0, int ZP = 0,
                 floatTuple g = floatTuple(0, 0, 0), floatTuple M = floatTuple(0, 0, 0),
@@ -231,7 +237,7 @@ commandBuffer cBuf;
 ////////////////////////////////
 ////////////////////////////////
 ////////////////////////////////
-======================================== ADCS DATA ===================================================================
+//======================================== ADCS DATA ===================================================================
 double mass = 1.33;
 double zeroMain = 0.0, six = 6.0;
 double Bfield[3];
