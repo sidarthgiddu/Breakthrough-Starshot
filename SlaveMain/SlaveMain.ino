@@ -1,5 +1,8 @@
 #include <Wire.h>
 #include <MatrixMathDOUBLE.h>
+#include <Adafruit_VC0706.h>
+#include <SPI.h>
+#include <SD.h>
 
 ////Constant Initialization
 bool TestReset = false;
@@ -45,11 +48,31 @@ const int CZ_PWM = 13; //Coil Z PWM Control
 const int CXY_Enable = A5; //Coil X and Y Enable
 const int CZ_Enable = 24; //Coil Z Enable
 
+//Software PWM Values
+bool p1 = true;
+bool p2 = true;
+bool p3 = true;
+int cycleLength = 600; //Microseconds
+unsigned long LastCycle = 0;
+unsigned long NextCycle = cycleLength;
+bool ADCS = true;
+bool startCycle = true;
+bool ADCS_exit = false;
+
+//Camera
+#define chipSelect 4
+#define smallImage VC0706_160x120
+#define mediumImage VC0706_320x240
+#define largeImage VC0706_640x480
+
+Adafruit_VC0706 cam = Adafruit_VC0706(&Serial1);
+
 int getTempDegrees() {
   // Returns the temperature of the sensor at pin senseTemp
   int temp = map(analogRead(TempS), 0, 543, -50, 125); //round?
   return temp;
 }
+
 int getLightLvl() {
   //Returns the lighting of the sensor at pin senselight (10k resistor)
   int light = map(analogRead(LightS), 0, 775, 100, 0); //2.5 / 3.3 *1023
@@ -84,7 +107,7 @@ class floatTuple
       Serial.print(y); Serial.print(" ");
       Serial.print(z); Serial.println(" ");
     }
-    
+
 };
 
 class slaveStatus
@@ -106,10 +129,18 @@ class slaveStatus
     int CurZPWM; // 0 to 255 for Coil Current Level
     float gyro[3];
     float mag[3];
+    int durX;
+    int durY;
+    int durZ;
+    bool CameraBurst;
+    int imageSize;
+    unsigned long burstStart;
+    unsigned long burstDuration;
 
     slaveStatus(float t = 0, int L = 0, int r = 0, int n = 0, int XD = 0, int XP = 0,
                 int YD = 0, int YP = 0, int ZD = 0, int ZP = 0,
-                floatTuple g = floatTuple(0, 0, 0), floatTuple M = floatTuple(0, 0, 0)) {
+                floatTuple g = floatTuple(0, 0, 0), floatTuple M = floatTuple(0, 0, 0),
+                int IS = smallImage, long BD = 120000) {
       ADCS_Active = false;
       Temp = t;
       Light = L;
@@ -123,6 +154,17 @@ class slaveStatus
       CurZPWM = ZP;
       gyro[0] = g.x; gyro[1] = g.y; gyro[2] = g.z;
       mag[0] = M.x; mag[1] = M.y; mag[2] = M.z;
+      durX = 0;
+      durY = 0;
+      durZ = 0;
+      imageSize = IS;
+      CameraBurst = false;
+      burstDuration = BD; //Default = 120s
+    }
+    void pwmWrite(int x, int y, int z) {
+      durX = map(x, 0, 255, 0, cycleLength);
+      durY = map(y, 0, 255, 0, cycleLength);
+      durZ = map(z, 0, 255, 0, cycleLength);
     }
     String toString() {
       String res = "";
@@ -189,7 +231,7 @@ commandBuffer cBuf;
 ////////////////////////////////
 ////////////////////////////////
 ////////////////////////////////
-////======================================== ADCS DATA ===================================================================
+======================================== ADCS DATA ===================================================================
 double mass = 1.33;
 double zeroMain = 0.0, six = 6.0;
 double Bfield[3];
@@ -205,10 +247,10 @@ void runADCS(double* Bvalues, double* gyroData, double Kp, double Kd) {
 
   //////////////freeRam ();
   //double J[9] = {0,Bvalues[2],(-1.0)*Bvalues[1],(-1.0)*Bvalues[2], 0, Bvalues[0], Bvalues[1], (-1.0)*Bvalues[0], 0};
-  
+
   Matrix.Print((double*)Bvalues, 3, 1, "Magn");
   Matrix.Print((double*)gyroData, 3, 1, "Gyro");
-  
+
   Matrix.Copy((double*)Bvalues, 1, 3, (double*)Bfield); // create new field to scale for the pseudo-inverse
   //Matrix.Scale((double*)Bfield, 3, 1, E); // scale duplicated Bfield array with E for pseudo-inverse
   //Matrix.Print((double*)Bfield, 3, 1, "Scaled Bfield");
@@ -230,31 +272,31 @@ void runADCS(double* Bvalues, double* gyroData, double Kp, double Kd) {
   Serial.println ("Step 3 complete");
   Matrix.Multiply((double*)Jp, (double*)Jtranspose, 3, 3, 4, (double*)Jppinv); // Bnew*transpose(Jnew)=Cnew
   Serial.println ("Step 4 complete");
-  
+
   // redefine Jp as Jpseudo-inverse
   Jp[0][0] = Jppinv[0][0]; Jp[0][1] = Jppinv[0][1]; Jp[0][2] = Jppinv[0][2]; // rescaled up
   Jp[1][0] = Jppinv[1][0]; Jp[1][1] = Jppinv[1][1]; Jp[1][2] = Jppinv[1][2];
   Jp[2][0] = Jppinv[2][0]; Jp[2][1] = Jppinv[2][1]; Jp[2][2] = Jppinv[2][2];
-  Matrix.Scale((double*)Jp,3,3,1000000.0);
+  Matrix.Scale((double*)Jp, 3, 3, 1000000.0);
   //////////////Serial.println(freeRam ());
   double OmegaError[3], BfieldError[3], ErrorSum[3], current[3];
   double Omegacmd[3] = {0, 0, 1};
-  double Bmagnitude = sqrt(Bvalues[0]*Bvalues[0]+Bvalues[1]*Bvalues[1]+Bvalues[2]*Bvalues[2]);
+  double Bmagnitude = sqrt(Bvalues[0] * Bvalues[0] + Bvalues[1] * Bvalues[1] + Bvalues[2] * Bvalues[2]);
   double Bcmd[3] = {0, 0, 1};
   double A = 0.532;
-  
-  Matrix.Scale((double*)Bfield, 3, 1, 1/Bmagnitude);
-  
+
+  Matrix.Scale((double*)Bfield, 3, 1, 1 / Bmagnitude);
+
   Matrix.Subtract((double*) Bfield, (double*) Bcmd, 3, 1, (double*) BfieldError);
   Serial.println ("Step 5 complete");
   Matrix.Subtract((double*) gyroData, (double*) Omegacmd, 3, 1, (double*) OmegaError);
   Serial.println ("Step 6 complete");
   //////////////Serial.println(freeRam ());
-  
-  Matrix.Scale((double*)BfieldError, 3, 1, (Kp/A)); // scale error with proportional gain (updates array)
-  
+
+  Matrix.Scale((double*)BfieldError, 3, 1, (Kp / A)); // scale error with proportional gain (updates array)
+
   Serial.println ("Step 7 complete");
-  Matrix.Scale((double*)OmegaError, 3, 1, (Kd/A)); // scale error with derivative gain (updates array)
+  Matrix.Scale((double*)OmegaError, 3, 1, (Kd / A)); // scale error with derivative gain (updates array)
   Serial.println ("Step 8 complete");
 
   Matrix.Add((double*)BfieldError, (double*)OmegaError, 3, 1, (double*) ErrorSum);
@@ -264,11 +306,11 @@ void runADCS(double* Bvalues, double* gyroData, double Kp, double Kd) {
 
   Matrix.Print((double*)ErrorSum, 3, 1, "MATRIX TO CHECK");
   Matrix.Print((double*)Jp, 3, 3, "Jpinv");
-  
+
   Serial.println(freeRam ()); delay(50);
   Matrix.Multiply((double*) Jp, (double*) ErrorSum, 3, 3, 1, (double*) current);
   Serial.println ("Step 11 complete");
-  
+
   //////////////Serial.println(freeRam ());
   //delete (Jp); delete  (Jtranspose); delete  (Jppinv);
   //delete (gyroData); delete (Bvalues); delete (Jnew);
@@ -297,6 +339,9 @@ void outputPWM(double* I, int length) {
   }
 
   // CREATE PWM OUT SIGNAL
+
+  //StatusHolder.pwmWrite(I[0] / Imaxf * 255,I[1] / Imaxf * 255,I[2] / Imaxf * 255);
+  /// ...
   //analogWrite(CX_PWM, I[0] / Imaxf * 255);
   //analogWrite(CY_PWM, I[1] / Imaxf * 255);
   //analogWrite(CZ_PWM, I[2] / Imaxf * 255);
@@ -313,7 +358,7 @@ static inline double sgn(double val) {
 }
 // Placeholder Test Data
 double gData[3] = {0.2, 0.04, -0.1};
-double mData[3] = {28.87,28.87,28.87}; //in 1000s of nT (or *10^3 nT)
+double mData[3] = {28.87, 28.87, 28.87}; //in 1000s of nT (or *10^3 nT)
 double Kp = 0.001;
 double Kd = 0.001;
 
@@ -431,28 +476,36 @@ void PopCommands() {
 
       //Switch Case on Command[0]
       switch (currentCommand[0]) {
-        case (11):
+        case (11): //Update Gyro X
           StatusHolder.gyro[0] = currentCommand[1];
           break;
-        case (12):
+        case (12): //Update Gyro Y
           StatusHolder.gyro[1] = currentCommand[1];
           break;
-        case (13):
+        case (13): //Update Gyro Z
           StatusHolder.gyro[2] = currentCommand[1];
           break;
-        case (21):
+        case (21): //Update Mag X
           StatusHolder.mag[0] = currentCommand[1];
           break;
-        case (22):
+        case (22): //Update Mag Y
           StatusHolder.mag[1] = currentCommand[1];
           break;
-        case (23):
+        case (23): //Update Mag Z
           StatusHolder.mag[2] = currentCommand[1];
           break;
-        case (91):
+        case (91): //Activate/Deactive ADCS (1=On,0=Off);
           StatusHolder.ADCS_Active = currentCommand[1];
           break;
-
+        case (101): //Start PhotoBurst
+          StatusHolder.burstStart = millis();
+          break;
+        case (102): //Set PhotBurst Duration
+          StatusHolder.burstDuration = currentCommand[1];
+          break;
+        case (103): //Request Photo #<currentCommand[1]>
+          //TODO
+          break;
       }
     } else {
       Serial.println("No Command");
@@ -558,6 +611,65 @@ void setup() {
   //Forced Stall
   //  pinMode(12, INPUT_PULLUP);
   //  attachInterrupt(digitalPinToInterrupt(12), forcedStall, LOW);
+
+  //Camera Setup
+  SD.begin(chipSelect);
+  //  if (!SD.begin(chipSelect)) {
+  //    Serial.println("Card failed, or not present");
+  //    // don't do anything more:
+  //    return;
+  //  }
+}
+
+int takePic(int ImageSize) {
+  // Try to locate the camera
+  cam.begin(); //Need to ensure it worked
+  cam.setImageSize(ImageSize);//cam.setImageSize(VC0706_160x120);
+
+  if (!cam.takePicture()) {
+    return 0;
+  } else {
+    StatusHolder.numPhotos++;
+    //Serial.println("Picture taken!");
+  }
+
+  // Create an image with the name IMAGExx.JPG //ALTER THIS TO STORE THE NEXT AVAILABLE FILENAME
+  char filename[13];
+  strcpy(filename, "IMAGE0000.JPG");
+  for (int i = 0; i < 9999; i++) {
+    filename[5] = '0' + StatusHolder.numPhotos / 1000;
+    filename[6] = '0' + StatusHolder.numPhotos % 1000 / 100;
+    filename[7] = '0' + StatusHolder.numPhotos % 1000 % 100 / 10;
+    filename[8] = '0' + StatusHolder.numPhotos % 1000 % 100 % 10;
+    if (!SD.exists(filename)) {
+      break;
+    } else {
+      StatusHolder.numPhotos++; //If loss of power resets it but photos were taken prior
+    }
+  }
+
+  File imgFile = SD.open(filename, FILE_WRITE); //Open Image File
+  uint16_t jpglen = cam.frameLength(); //Image Size in Bytes
+  uint16_t bytesWritten = 0;
+
+  //int32_t time = millis();
+  pinMode(8, OUTPUT);
+  // Read all the data up to # bytes!
+  byte wCount = 0; // For counting # of writes
+  while (jpglen > 0) {
+    uint8_t *buffer;
+    uint8_t bytesToRead = min(64, jpglen); // 64 Byte Reads
+    buffer = cam.readPicture(bytesToRead);
+    bytesWritten += imgFile.write(buffer, bytesToRead); //Returns bytes written if needed
+    if (++wCount >= 64) { // Every 2K, give a little feedback so it doesn't appear locked up
+      //Reset Timer Here
+      wCount = 0;
+    }
+    jpglen -= bytesToRead;
+  }
+  imgFile.close();
+  //time = millis() - time;
+  return bytesWritten;
 }
 
 int ledState = HIGH;
@@ -565,37 +677,76 @@ long ledLastTime = 0;
 long lastADCSTime = 0;
 
 void loop() {
+  StatusHolder.updatePassive();
+  StatusHolder.ADCS_Active = true;
+  //Test ADCS
+  if (StatusHolder.ADCS_Active) {
+    if (millis() - lastADCSTime >= 2000) {
+      if (millis() - lastADCSTime >= 2100) {
+        Serial.println("happy");
+        runADCS(mData, gData, Kp, Kd); //placeholders
+        Serial.println("still happy");
+        //Serial.print("X axis: "); Serial.print(StatusHolder.CurXDir, 20); Serial.print(" "); Serial.println(StatusHolder.CurXPWM, 20);
+        //Serial.print("Y axis: "); Serial.print(StatusHolder.CurYDir, 20); Serial.print(" "); Serial.println(StatusHolder.CurYPWM, 20);
+        //Serial.print("Z axis: "); Serial.print(StatusHolder.CurZDir, 20); Serial.print(" "); Serial.println(StatusHolder.CurZPWM, 20);
+        lastADCSTime = millis();
+      } else {
+        //torquers off
+        //analogWrite(CX_PWM, 0);
+        //analogWrite(CY_PWM, 0);
+        //analogWrite(CZ_PWM, 0);
+        //floatTuple PWMvaluesForTorquers = floatTuple(0,0,0;
+        //floatTuple PWMdirectionsForTorquers = floatTuple(0,0,0);
+        //StatusHolder.updateTorquers(PWMdirectionsForTorquers, PWMvaluesForTorquers);
+      }
+    }
 
-  StatusHolder.updatePassive(); StatusHolder.ADCS_Active = true;
- //Test ADCS
-  if (StatusHolder.ADCS_Active && millis() - lastADCSTime >= 2000) {
-    if (millis() - lastADCSTime >= 2100) {
-      Serial.println("happy");
-      runADCS(mData, gData, Kp, Kd); //placeholders
-      Serial.println("still happy");
-      //Serial.print("X axis: "); Serial.print(StatusHolder.CurXDir, 20); Serial.print(" "); Serial.println(StatusHolder.CurXPWM, 20);
-      //Serial.print("Y axis: "); Serial.print(StatusHolder.CurYDir, 20); Serial.print(" "); Serial.println(StatusHolder.CurYPWM, 20);
-      //Serial.print("Z axis: "); Serial.print(StatusHolder.CurZDir, 20); Serial.print(" "); Serial.println(StatusHolder.CurZPWM, 20);
-      lastADCSTime = millis();
-    } else {
-      //torquers off
-      //analogWrite(CX_PWM, 0);
-      //analogWrite(CY_PWM, 0);
-      //analogWrite(CZ_PWM, 0);
-      //floatTuple PWMvaluesForTorquers = floatTuple(0,0,0;
-      //floatTuple PWMdirectionsForTorquers = floatTuple(0,0,0);
-      //StatusHolder.updateTorquers(PWMdirectionsForTorquers, PWMvaluesForTorquers);
+    //SoftwarePWM
+    unsigned long ms = micros();
+    if (startCycle) {
+      digitalWrite(A1, HIGH);
+      digitalWrite(A2, HIGH);
+      digitalWrite(A3, HIGH);
+      startCycle = false;
+      NextCycle = ms + cycleLength;
+      LastCycle = ms;
+      p1 = true;
+      p2 = true;
+      p3 = true;
+    }
+    if (p1 && (ms - LastCycle >= StatusHolder.durX)) {
+      //Serial.println("Here");
+      digitalWrite(CX_PWM, LOW);
+      p1 = false;
+    }
+    if (p2 && (ms - LastCycle >= StatusHolder.durY)) {
+      digitalWrite(CY_PWM, LOW);
+      p2 = false;
+    }
+    if (p3 && (ms - LastCycle >= StatusHolder.durZ)) {
+      digitalWrite(CZ_PWM, LOW);
+      p3 = false;
+    }
+    if (ms > NextCycle) {
+      //Serial.print("End");
+      startCycle = true;
+    }
+  } else {
+    if (ADCS_exit) {
+      digitalWrite(CX_PWM, LOW);
+      digitalWrite(CY_PWM, LOW);
+      digitalWrite(CZ_PWM, LOW);
+      ADCS_exit = false;
     }
   }
 
-  //Reset Master if No Communication for 5 min
-  //  if (TestReset && (millis() - lastMasterCom > MasterFaultTime)) {
-  //    digitalWrite(MasterReset, LOW);
-  //    resets++;
-  //    delay(100);
-  //    digitalWrite(MasterReset, HIGH);
-  //    lastMasterCom = millis(); //
-  //  }
+  if (StatusHolder.CameraBurst) {
+    if (millis() < StatusHolder.burstStart + StatusHolder.burstDuration) {
+      takePic(StatusHolder.imageSize);
+    } else {
+      StatusHolder.CameraBurst = false;
+    }
+  }
 
   //Blinker for Testing
   if (millis() - ledLastTime >= 477) {
@@ -609,6 +760,15 @@ void loop() {
     //Serial.println(millis() - ledLastTime);
     ledLastTime = millis();
   }
+
+  //Reset Master if No Communication for 5 min
+  //  if (TestReset && (millis() - lastMasterCom > MasterFaultTime)) {
+  //    digitalWrite(MasterReset, LOW);
+  //    resets++;
+  //    delay(100);
+  //    digitalWrite(MasterReset, HIGH);
+  //    lastMasterCom = millis(); //
+  //  }
 
 }
 
