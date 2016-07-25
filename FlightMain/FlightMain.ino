@@ -271,6 +271,18 @@ class masterStatus {
     int CurZDir; //-1 or 1 for Coil Current Direction
     int CurZPWM; // 0 to 255 for Coil Current Level
 
+    //ROCKBLOCKVARIABLES
+    String MOStatus;
+    String MOMSN;
+    String MTStatus;
+    String MTMSN;
+    String MTLength;
+    String MTQueued;
+    String RING;
+    String Error;
+   
+     
+
 
     masterStatus(int S = NORMAL_OPS, floatTuple g = floatTuple(0, 0, 0) , floatTuple M = floatTuple(0, 0, 0), int IT = 0,
                  float B = 0, float SolarXP = 0, float SolarXM = 0, float SolarYP = 0, float SolarYM = 0,
