@@ -612,7 +612,7 @@ void popCommands() {
           masterStatusHolder.numPhotos = (currentCommand[2]);
           break;
         case (81):
-        
+          
           break;
       }
 
