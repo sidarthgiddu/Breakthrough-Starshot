@@ -278,11 +278,13 @@ class masterStatus {
     String MTMSN;
     String MTLength;
     String MTQueued;
+    String SBDRT;
     String RING;
+    String Ok;
     String Error;
-   
+    String NoMsg;
+    String Invalid;
      
-
 
     masterStatus(int S = NORMAL_OPS, floatTuple g = floatTuple(0, 0, 0) , floatTuple M = floatTuple(0, 0, 0), int IT = 0,
                  float B = 0, float SolarXP = 0, float SolarXM = 0, float SolarYP = 0, float SolarYM = 0,
@@ -623,6 +625,43 @@ void popCommands() {
         case (610):
           masterStatusHolder.numPhotos = (currentCommand[2]);
           break;
+        case (71):
+          masterStatusHolder.MOStatus = (currentCommand[2]);
+          break;
+        case (72):
+          masterStatusHolder.MOMSN = (currentCommand[2]);
+          break;
+        case (73):
+          masterStatusHolder.MTStatus = (currentCommand[2]);
+          break;
+        case (74):
+          masterStatusHolder.MTMSN = (currentCommand[2]);
+          break;
+        case (75):
+          masterStatusHolder.MTLength = (currentCommand[2]);
+          break;
+        case (76):
+          masterStatusHolder.MTQueued = (currentCommand[2]);
+          break;
+        case (77):
+          masterStatusHolder.SBDRT = (currentCommand[2]);
+          break;
+        case (78):
+          masterStatusHolder.RING = (currentCommand[2]);
+          break;
+        case (79):
+          masterStatusHolder.Ok = (currentCommand[2]);
+          break;
+        case (710):
+          masterStatusHolder.Error = (currentCommand[2]);
+          break;
+        case (711):
+          masterStatusHolder.NoMsg = (currentCommand[2]);
+          break;
+        case (712):
+          masterStatusHolder.Invalid = (currentCommand[2]);
+          break;
+    
         case (81):
           
           break;
@@ -716,7 +755,6 @@ void sendIMUToSlave() {
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-///////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1377,10 +1415,3 @@ void loop() {
 //
 //
 //
-
-
-
-
-
-
-
