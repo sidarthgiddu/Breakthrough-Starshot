@@ -271,6 +271,20 @@ class masterStatus {
     int CurZDir; //-1 or 1 for Coil Current Direction
     int CurZPWM; // 0 to 255 for Coil Current Level
 
+    //ROCKBLOCKVARIABLES
+    String MOStatus;
+    String MOMSN;
+    String MTStatus;
+    String MTMSN;
+    String MTLength;
+    String MTQueued;
+    String SBDRT;
+    String RING;
+    String Ok;
+    String Error;
+    String NoMsg;
+    String Invalid;
+     
 
     masterStatus(int S = NORMAL_OPS, floatTuple g = floatTuple(0, 0, 0) , floatTuple M = floatTuple(0, 0, 0), int IT = 0,
                  float B = 0, float SolarXP = 0, float SolarXM = 0, float SolarYP = 0, float SolarYM = 0,
@@ -611,8 +625,45 @@ void popCommands() {
         case (610):
           masterStatusHolder.numPhotos = (currentCommand[2]);
           break;
+        case (71):
+          masterStatusHolder.MOStatus = (currentCommand[2]);
+          break;
+        case (72):
+          masterStatusHolder.MOMSN = (currentCommand[2]);
+          break;
+        case (73):
+          masterStatusHolder.MTStatus = (currentCommand[2]);
+          break;
+        case (74):
+          masterStatusHolder.MTMSN = (currentCommand[2]);
+          break;
+        case (75):
+          masterStatusHolder.MTLength = (currentCommand[2]);
+          break;
+        case (76):
+          masterStatusHolder.MTQueued = (currentCommand[2]);
+          break;
+        case (77):
+          masterStatusHolder.SBDRT = (currentCommand[2]);
+          break;
+        case (78):
+          masterStatusHolder.RING = (currentCommand[2]);
+          break;
+        case (79):
+          masterStatusHolder.Ok = (currentCommand[2]);
+          break;
+        case (710):
+          masterStatusHolder.Error = (currentCommand[2]);
+          break;
+        case (711):
+          masterStatusHolder.NoMsg = (currentCommand[2]);
+          break;
+        case (712):
+          masterStatusHolder.Invalid = (currentCommand[2]);
+          break;
+    
         case (81):
-        
+          
           break;
       }
 
@@ -704,13 +755,259 @@ void sendIMUToSlave() {
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-///////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 // RockBlock Uplink/Downlink Functions
 //
+int curComL = 0;
+
+String rocResponseRead() {
+  long start = millis();
+  while (!Serial1.available() && (millis() - start > 1000));
+  delay(100);
+  String responseString = "";
+  while (Serial1.available() > 0) {
+    responseString += (char)Serial1.read();
+  }
+  if (millis() - start > 1000) {
+    Serial.println("Com Timeout");
+  }
+  return responseString;
+
+}
+
+bool rocOKParse() {
+  String input = rocResponseRead();
+  bool valid = false;
+  //Serial.print(input[curComL+2]);
+  if (input[2] == 'O' && input[3] == 'K') {
+    valid = true;
+  }
+  return valid;
+}
+
+String RBDATA() {
+  int swnumber = 0;
+  String ReceivedMessage = rocResponseRead(); //determines case
+  //Serial.print("ReceivedMessage:");
+  //Serial.println(ReceivedMessage);
+  int plus = ReceivedMessage.indexOf('+');
+  int colon = ReceivedMessage.indexOf(':');
+  int S_SBDRING = ReceivedMessage.indexOf('S');
+  int E_ERROR = ReceivedMessage.indexOf('E');
+  int R_ERROR = ReceivedMessage.lastIndexOf('R');
+  int O_OK = ReceivedMessage.indexOf('O');
+  int K_OK = ReceivedMessage.indexOf('K');
+  int space=ReceivedMessage.indexOf(' ');
+  int carReturn=ReceivedMessage.lastIndexOf('\r');
+  //Serial.print("Space:");
+  //Serial.println(space);
+  //Serial.print("carReturn:");
+  //Serial.println(carReturn);
+  
+
+  String Ring;
+  String OK;
+  String error;
+  String nomessage;
+  String invalid;
+  int LengthOfMessage=ReceivedMessage.length();
+//  Serial.print("Length of Message:");
+//  Serial.println(ReceivedMessage.length());
+//  Serial.print("Substring:");
+//  Serial.println(ReceivedMessage.substring(plus, colon));
+
+  if (ReceivedMessage.substring(plus, colon).equals("+SBDIX")) {
+//    Serial.println("swnumber=1");
+//    Serial.print("<<");
+//    Serial.print(ReceivedMessage[24]);
+//    Serial.println(">>");
+//    Serial.print("<<");
+//    Serial.print(ReceivedMessage[25]);
+//    Serial.println(">>");
+//    Serial.print("<<");
+//    Serial.print(ReceivedMessage[26]);
+//    Serial.println(">>");
+//    Serial.print("<<");
+//    Serial.print(ReceivedMessage[27]);
+//    Serial.println(">>");
+//    Serial.print("<<");
+//    Serial.print(ReceivedMessage[28]);
+//    Serial.println(">>");
+//    Serial.print("<<");
+//    Serial.print(ReceivedMessage[29]);
+//    Serial.println(">>");
+//    Serial.print("<<");
+//    Serial.print(ReceivedMessage[30]);
+//    Serial.println(">>");
+    swnumber = 1;
+  }
+  else if (ReceivedMessage.substring(plus, colon).equals("+SBDRT")) {
+    swnumber = 2;
+  }
+  else if (ReceivedMessage.substring(S_SBDRING).equals("SBDRING")) {
+    swnumber = 3;
+  }
+  else if (ReceivedMessage.substring(E_ERROR, R_ERROR).equals("ERRO")) {
+    swnumber = 5;
+  }
+  else if (ReceivedMessage.length() == 0) {
+    swnumber = 6;
+  }
+  else if (ReceivedMessage.substring(O_OK,K_OK+1).equals("OK")) {
+    if (swnumber == 0) {
+      swnumber = 4;
+    }
+  }
+  else {
+    swnumber = 0;
+  }
+ 
+  String DATA = ReceivedMessage.substring(colon + 1);
+  int DATALength=DATA.length();
+  String SBDRTDATA=DATA.substring(2,(DATALength-6));
+  int SBDRTDATALength=SBDRTDATA.length();
+//  Serial.print(swnumber);
+//  Serial.print("DATA:");
+//  Serial.println(DATA);
+//  Serial.print("SBDRTDATA:");
+//  Serial.println(SBDRTDATA);
+//  Serial.print("DATALength:");
+//  Serial.println(DATALength);
+//  Serial.print("SBDRTLength:");
+//  Serial.println(SBDRTDATALength);
+
+  int firstcomma, secondcomma, thirdcomma, fourthcomma, fifthcomma;
+  String firstnumber, secondnumber, thirdnumber, fourthnumber, fifthnumber, sixthnumber;
+
+  switch (swnumber) {
+    case 1: //SBDIX command
+      //Serial.println("case 1");
+      firstcomma  = DATA.indexOf(',');
+      secondcomma = DATA.indexOf(',', firstcomma + 1);
+      thirdcomma = DATA.indexOf(',', secondcomma + 1);
+      fourthcomma = DATA.indexOf(',', thirdcomma + 1);
+      fifthcomma = DATA.indexOf(',', fourthcomma + 1);
+      firstnumber = DATA.substring(1, firstcomma);
+      //Serial.println(firstnumber);
+      secondnumber = DATA.substring(firstcomma + 2, secondcomma);
+      //Serial.println(secondnumber);
+      thirdnumber = DATA.substring(secondcomma + 2, thirdcomma);
+      //Serial.println(thirdnumber);
+      fourthnumber = DATA.substring(thirdcomma + 2, fourthcomma);
+      //Serial.println(fourthnumber);
+      fifthnumber = DATA.substring(fourthcomma + 2, fifthcomma);
+      //Serial.println(fifthnumber);
+      sixthnumber = DATA.substring(fifthcomma + 2,LengthOfMessage-17);
+     // Serial.print("sixthnumber:");
+      //Serial.println(sixthnumber);
+      //Serial.println("71," + firstnumber + "!72," + secondnumber + "!73," + thirdnumber + "!74,"
+//                     + fourthnumber + "!75," + fifthnumber + "!76," + sixthnumber + "!");
+      return "71," + firstnumber + "!72," + secondnumber + "!73," + thirdnumber + "!74,"
+             + fourthnumber + "!75," + fifthnumber + "!76," + sixthnumber + "!";
+      break;
+
+    case 2: //SBDRT command
+      //Serial.print("Here in case 2");      
+      return "77," + SBDRTDATA + "!";
+      break;
+    case 3: //SBDRING
+      Ring = 1;
+      //Serial.println("RINGING");
+      return "78," + Ring + "!";
+      break;
+    case 4: //OK
+      //Serial.println("here in case 4");
+      OK = 1;
+      return "79," + OK + "!";
+      break;
+    case 5:
+      error = 1;
+      return "710," + error + "!";
+      break;
+    case 6:
+      nomessage = 1;
+      return "711," + nomessage + "!";
+      break;
+    case 0:
+      invalid = 1;
+      return "712," + invalid + "!";
+      break;
+  }
+}
+
+
+
+int lastRBcheck = 0;
+
+  //  int failT = startTest();
+  //  switch (failT) {
+  //    case 0:
+  //      //Wire.beginTransmission(8);
+  //      //Serial.println("Success");
+  //      //Wire.endTransmission();
+  //      break;
+  //    case 1:
+  //      //Wire.beginTransmission(8);
+  //      //Serial.println("Fail Type 1");
+  //      //Wire.endTransmission();
+  //      break;
+  //    case 2:
+  //      //Wire.beginTransmission(8);
+  //      //Serial.println("Fail Type 2");
+  //      //Wire.endTransmission();
+  //      break;
+  //    case 3:
+  //      //Wire.beginTransmission(8);
+  //      //Serial.println("Fail Type 3");
+  //      //Wire.endTransmission();
+  //      break;
+  //      //finish
+
+
+bool responsePing() {
+  bool ping = false;
+  Serial1.print("AT\r");
+  if (rocOKParse()) {
+    ping = true;
+  }
+  //Serial.println(ping);
+  return ping;
+}
+
+
+//int startTest() {
+//  // while millis < 6mins
+//  bool go = true;
+//  int failType = 0;
+//  Serial.println("Here Starttest");
+//  Serial1.print("ATE0\r");
+//  if (rocOKParse() || true) {
+//    Serial.println("Stage0 Pass");
+//    Serial1.print("AT\r");
+//    if (rocOKParse()) {
+//      Serial.println("Stage1 Pass");
+//      Serial1.print("AT+SBDIX\r");
+//      if (rocOKParse()) {
+//        Serial.println("Stage2 Pass");
+//        Serial1.print("AT+SBDWT=");
+//        Serial1.print(downlinkData);
+//        Serial1.print("\r");
+//        if (rocOKParse()) {
+//          Serial.println("Stage3 Pass");
+//          go = false;
+//
+//        }
+//      }
+//    }
+//  }
+//  return failType;
+//
+//}
+
+
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -792,6 +1089,9 @@ void setup()
   //  for (int i = 0 ; i < 10; i++) {
   //    Serial.println("Finished Setup");
   //  }
+  Serial1.begin(19200);
+  //pinMode(10, OUTPUT); SLEEP PIN?
+  //digitalWrite (10, HIGH);
 }
 
 void loop() {
@@ -1042,6 +1342,11 @@ void loop() {
   cycle++;
   //Serial.print("C: ");
   //Serial.println(cycle);
+  if (millis() - lastRBcheck >= (300000)) {
+    RBDATA();
+    //responsePing();
+    lastRBcheck = millis();
+  }
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1110,10 +1415,3 @@ void loop() {
 //
 //
 //
-
-
-
-
-
-
-
