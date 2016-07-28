@@ -113,6 +113,12 @@ class floatTuple
 class slaveStatus
 {
   public:
+  
+    bool DownlinkActive; // are we downlinking
+    int ImageIndexCount; // the number of indexes needed
+    int CurrentIndex; // current index being used
+    int EndSpot; // what place in the final index does the data end
+    
     bool ADCS_Active;
     int Temp;
     int Light;
@@ -137,14 +143,9 @@ class slaveStatus
     unsigned long burstStart;
     unsigned long burstDuration;
 
-    //Iridium Network Status Attributes
 
-
-
-    
-
-    slaveStatus(float t = 0, int L = 0, int r = 0, int n = 0, int XD = 0, int XP = 0,
-                int YD = 0, int YP = 0, int ZD = 0, int ZP = 0,
+    slaveStatus(bool DA = false, int IIC = 0, int CI = 0, int ES = 0, float t = 0, int L = 0,int r = 0,
+                int n = 0, int XD = 0, int XP = 0,int YD = 0, int YP = 0, int ZD = 0, int ZP = 0,
                 floatTuple g = floatTuple(0, 0, 0), floatTuple M = floatTuple(0, 0, 0),
                 int IS = smallImage, long BD = 120000) {
       ADCS_Active = false;
@@ -166,6 +167,11 @@ class slaveStatus
       imageSize = IS;
       CameraBurst = false;
       burstDuration = BD; //Default = 120s
+      
+      DownlinkActive = DA;// downlink active or downlink requested?
+      ImageIndexCount = IIC;
+      CurrentIndex = CI;
+      EndSpot = ES;
     }
     void pwmWrite(int x, int y, int z) {
       durX = map(x, 0, 255, 0, cycleLength);

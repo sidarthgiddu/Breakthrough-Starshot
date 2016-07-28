@@ -88,25 +88,25 @@ bool commandedDL = false;
 
 //Pinout Numbers
 //TO DO
-const int DoorSens = 13;
-const int DoorTrig = 5;
-const int BatteryPin = A0;
-const int RBRx = 0; //RockBlock Serial Into FCom
-const int RBTx = 1; //RockBlock Serial Out of FCom
-const int RBSleep = 22;
-const int RB_RI = 23;
-const int RB_RTS = 24;
-const int RB_CTS = 6;
-const int SDApin = 20; //I2C Data
-const int SCLpin = 21; //I2C Clock
-const int SolarXPlus = A1; //Solar Current X+
-const int SolarXMinus = A2; //Solar Current X-
-const int SolarYPlus = A3; //Solar Current Y+
-const int SolarYMinus = A4; //Solar Current Y-
-const int SolarZPlus = A5; //Solar Current Z+
-const int SolarZMinus = 9; //Solar Current Z-
-const int SlaveReset = 10; //Slave Fault Handing (via Hard Reset)
-const int DoorMagEnable = 11; //Allow Door Magnetorquer to work
+#define DoorSens 13
+#define DoorTrig 5
+#define BatteryPin A0
+#define RBRx 0 //RockBlock Serial Into FCom
+#define RBTx 1 //RockBlock Serial Out of FCom
+#define RBSleep 22
+#define RB_RI 23
+#define RB_RTS 24
+#define RB_CTS 6
+#define SDApin 20 //I2C Data
+#define SCLpin 21 //I2C Clock
+#define SolarXPlusPin A1 //Solar Current X+
+#define SolarXMinusPin A2 //Solar Current X-
+#define SolarYPlusPin A3 //Solar Current Y+
+#define SolarYMinusPin A4 //Solar Current Y-
+#define SolarZPlusPin A5 //Solar Current Z+
+#define SolarZMinusPin 9 //Solar Current Z-
+#define SlaveReset 10 //Slave Fault Handing (via Hard Reset)
+#define DoorMagEnable 11 //Allow Door Magnetorquer to work
 
 //Downlink Test Placeholders
 long DLTime = 6005;
@@ -390,25 +390,24 @@ masterStatus masterStatusHolder;
 void initalizePinOut() {
   ///const int DoorSens = 13; pinMode(DoorSens, INPUT); //WRONG
   pinMode(13, OUTPUT); //Red LED
-
-  const int DoorTrig = 5; pinMode(DoorTrig, OUTPUT);
-  const int Battery = A0; pinMode(Battery, INPUT);
-  const int RBRx = 0; //RockBlock Serial Into FCom
-  const int RBTx = 1; //RockBlock Serial Out of FCom
-  const int RBSleep = 22; pinMode(RBSleep, OUTPUT);
-  const int RB_RI = 23; pinMode(RB_RI, INPUT);
-  const int RB_RTS = 24; pinMode(RB_RTS, INPUT);
-  const int RB_CTS = 6; pinMode(RB_CTS, INPUT);
-  const int SDApin = 20; //I2C Data
-  const int SCLpin = 21; //I2C Clock
-  const int SolarXPlus = A1; pinMode(SolarXPlus, INPUT); //Solar Current X+
-  const int SolarXMinus = A2; pinMode(SolarXMinus, INPUT); //Solar Current X-
-  const int SolarYPlus = A3; pinMode(SolarYPlus, INPUT); //Solar Current Y+
-  const int SolarYMinus = A4; pinMode(SolarYMinus, INPUT); //Solar Current Y-
-  const int SolarZPlus = A5; pinMode(SolarZPlus, INPUT); //Solar Current Z+
-  const int SolarZMinus = 9; pinMode(SolarZMinus, INPUT); //Solar Current Z-
-  const int SlaveReset = 10; pinMode(SolarZMinus, INPUT); //Slave Fault Handing (via Hard Reset)
-  const int DoorMagEnable = 11; pinMode(DoorMagEnable, OUTPUT); //Allow Door Magnetorquer to work
+  pinMode(DoorTrig, OUTPUT);
+  pinMode(BatteryPin, INPUT);
+ //RockBlock Serial Into FCom
+ //RockBlock Serial Out of FCom
+  pinMode(RBSleep, OUTPUT);
+  pinMode(RB_RI, INPUT);
+  pinMode(RB_RTS, INPUT);
+  pinMode(RB_CTS, INPUT);
+  //I2C Data
+  //I2C Clock
+  pinMode(SolarXPlusPin, INPUT); //Solar Current X+
+  pinMode(SolarXMinusPin, INPUT); //Solar Current X-
+  pinMode(SolarYPlusPin, INPUT); //Solar Current Y+
+  pinMode(SolarYMinusPin, INPUT); //Solar Current Y-
+  pinMode(SolarZPlusPin, INPUT); //Solar Current Z+
+  pinMode(SolarZMinusPin, INPUT); //Solar Current Z-
+  pinMode(SolarZMinusPin, INPUT); //Slave Fault Handing (via Hard Reset)
+  pinMode(DoorMagEnable, OUTPUT); //Allow Door Magnetorquer to work
 }
 
 float getCurrentAmp(int panel) {
@@ -417,37 +416,37 @@ float getCurrentAmp(int panel) {
   switch (panel) {
     case 1:
       if (hardwareAvTable[1]) {
-        current = analogRead(SolarXPlus);
+        current = analogRead(SolarXPlusPin);
       } else {
         current = 0;
       } break;
     case 2:
       if (hardwareAvTable[2]) {
-        current = analogRead(SolarXMinus);
+        current = analogRead(SolarXMinusPin);
       } else {
         current = 0;
       } break;
     case 3:
       if (hardwareAvTable[3]) {
-        current = analogRead(SolarYPlus);
+        current = analogRead(SolarYPlusPin);
       } else {
         current = 0;
       } break;
     case 4:
       if (hardwareAvTable[4]) {
-        current = analogRead(SolarYMinus);
+        current = analogRead(SolarYMinusPin);
       } else {
         current = 0;
       } break;
     case 5:
       if (hardwareAvTable[5]) {
-        current = analogRead(SolarZPlus);
+        current = analogRead(SolarZPlusPin);
       } else {
         current = 0;
       } break;
     case 6:
       if (hardwareAvTable[6]) {
-        current = analogRead(SolarZMinus);
+        current = analogRead(SolarZMinusPin);
       } else {
         current = 0;
       } break;
@@ -1411,7 +1410,5 @@ void loop() {
 //    Serial.println ("Error Occured during Image Capture");
 //  }
 //  return true;
+//
 //}
-//
-//
-//
