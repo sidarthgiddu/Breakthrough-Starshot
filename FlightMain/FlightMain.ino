@@ -620,7 +620,6 @@ void popCommands() {
           masterStatusHolder.numPhotos = (currentCommand[2]);
           break;
       }
-
     } else {
       //Serial.println("No Command");
     }
@@ -663,9 +662,11 @@ void readSerialAdd2Buffer() {
   Send Mag Z to Slave: "23,<(String)(float)>!"
   Z Torquer On for Heat: "41,1!"
   Z Torquer Off for Heat: "41,0!"
-  Activate ACDS: "51,1!"
-  Deactivate ACDS: "51,0!"
-  Take a Picture if ready: "61,1!"
+  Activate ACDS: "91,1!"
+  Deactivate ACDS: "91,0!"
+  Photo Burst Start: "101,1!"
+  Photo Burst Duration: "101,<int>!" (Seconds NOT Millis)
+  
 */
 
 void sendSCommand(char data[]) {
@@ -677,12 +678,12 @@ void sendSCommand(char data[]) {
 }
 
 String requestFromSlave() {
-  Serial.println("Requesting");
+  //Serial.println("Requesting");
   Wire.requestFrom(8, 100, true); // request 16 bytes from slave device #8
   delay(50);
   String res = "";
   int endTime = millis() + manualTimeout;
-  Serial.println("Here");
+  //Serial.println("Here");
   while (Wire.available() && millis() < endTime) { // slave may send less than requested
     res += (char)Wire.read(); // receive a byte as character
   }
@@ -786,7 +787,6 @@ void setup()
     Serial.println("IMU Not working");
   }
 
-
   cBuf = commandBuffer();
   masterStatusHolder = masterStatus();
 
@@ -794,9 +794,9 @@ void setup()
   //pinMode(A3, INPUT); //Temperature Sensor
   Wire.begin(); //Start i2c as master
 
-  //  for (int i = 0 ; i < 10; i++) {
-  //    Serial.println("Finished Setup");
-  //  }
+    for (int i = 0 ; i < 10; i++) {
+      Serial.println("Finished Setup");
+    }
 }
 
 void loop() {

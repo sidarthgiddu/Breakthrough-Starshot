@@ -507,7 +507,7 @@ void PopCommands() {
           StatusHolder.burstStart = millis();
           break;
         case (102): //Set PhotBurst Duration
-          StatusHolder.burstDuration = currentCommand[1];
+          StatusHolder.burstDuration = currentCommand[1]*1000;
           break;
         case (103): //Request Photo #<currentCommand[1]>
           //TODO
@@ -684,7 +684,7 @@ long lastADCSTime = 0;
 
 void loop() {
   StatusHolder.updatePassive();
-  StatusHolder.ADCS_Active = true;
+  StatusHolder.ADCS_Active = false;
   //Test ADCS
   if (StatusHolder.ADCS_Active) {
     if (millis() - lastADCSTime >= 2000) {
@@ -739,6 +739,7 @@ void loop() {
     }
   } else {
     if (ADCS_exit) {
+      X_Dir
       digitalWrite(CX_PWM, LOW);
       digitalWrite(CY_PWM, LOW);
       digitalWrite(CZ_PWM, LOW);
