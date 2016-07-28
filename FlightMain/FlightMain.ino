@@ -1410,5 +1410,4 @@ void loop() {
 //    Serial.println ("Error Occured during Image Capture");
 //  }
 //  return true;
-//
 //}
