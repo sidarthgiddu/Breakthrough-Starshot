@@ -280,7 +280,12 @@ class masterStatus {
     int MTQueued;
     String SBDRT;
     int LastMsgType;
-
+      //LastMsgType values:
+      //0 = inval
+      //1 = ok
+      //2 = ring
+      //3 = error
+      //4 = ready
 
     masterStatus(int S = NORMAL_OPS, floatTuple g = floatTuple(0, 0, 0) , floatTuple M = floatTuple(0, 0, 0), int IT = 0,
                  float B = 0, float SolarXP = 0, float SolarXM = 0, float SolarYP = 0, float SolarYM = 0,
