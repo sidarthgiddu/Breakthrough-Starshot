@@ -105,12 +105,12 @@ const int RB_RTS = 24;
 const int RB_CTS = 6;
 const int SDApin = 20; //I2C Data
 const int SCLpin = 21; //I2C Clock
-const int SolarXPlus = A1; //Solar Current X+
-const int SolarXMinus = A2; //Solar Current X-
-const int SolarYPlus = A3; //Solar Current Y+
-const int SolarYMinus = A4; //Solar Current Y-
-const int SolarZPlus = A5; //Solar Current Z+
-const int SolarZMinus = 9; //Solar Current Z-
+const int SolarXPlusPin = A1; //Solar Current X+
+const int SolarXMinusPin = A2; //Solar Current X-
+const int SolarYPlusPin = A3; //Solar Current Y+
+const int SolarYMinusPin = A4; //Solar Current Y-
+const int SolarZPlusPin = A5; //Solar Current Z+
+const int SolarZMinusPin = 9; //Solar Current Z-
 const int SlaveReset = 10; //Slave Fault Handing (via Hard Reset)
 const int DoorMagEnable = 11; //Allow Door Magnetorquer to work
 
@@ -437,6 +437,7 @@ class masterStatus {
     int CurZPWM; // 0 to 255 for Coil Current Level
 
     //ROCKBLOCKVARIABLES
+
     bool AttemptingLink;
     int MOStatus;
     int MOMSN;
@@ -452,6 +453,7 @@ class masterStatus {
     //2 = ring
     //3 = error
     //4 = ready
+
 
     masterStatus(int S = NORMAL_OPS, floatTuple g = floatTuple(0, 0, 0) , floatTuple M = floatTuple(0, 0, 0), int IT = 0,
                  float B = 0, float SolarXP = 0, float SolarXM = 0, float SolarYP = 0, float SolarYM = 0,
@@ -490,6 +492,7 @@ class masterStatus {
       SlaveWorking = SW;
       Resets = R;
       missionStatus = mS;
+
 
       imageR = RAMImage();
       currentSegment = 0;
@@ -589,25 +592,25 @@ masterStatus masterStatusHolder;
 void initalizePinOut() {
   ///const int DoorSens = 13; pinMode(DoorSens, INPUT); //WRONG
   pinMode(13, OUTPUT); //Red LED
+  pinMode(DoorTrig, OUTPUT);
+  pinMode(BatteryPin, INPUT);
+  //RockBlock Serial Into FCom
+  //RockBlock Serial Out of FCom
+  pinMode(RBSleep, OUTPUT);
+  pinMode(RB_RI, INPUT);
+  pinMode(RB_RTS, INPUT);
+  pinMode(RB_CTS, INPUT);
+  //I2C Data
+  //I2C Clock
+  pinMode(SolarXPlusPin, INPUT); //Solar Current X+
+  pinMode(SolarXMinusPin, INPUT); //Solar Current X-
+  pinMode(SolarYPlusPin, INPUT); //Solar Current Y+
+  pinMode(SolarYMinusPin, INPUT); //Solar Current Y-
+  pinMode(SolarZPlusPin, INPUT); //Solar Current Z+
+  pinMode(SolarZMinusPin, INPUT); //Solar Current Z-
+  pinMode(SolarZMinusPin, INPUT); //Slave Fault Handing (via Hard Reset)
+  pinMode(DoorMagEnable, OUTPUT); //Allow Door Magnetorquer to work
 
-  const int DoorTrig = 5; pinMode(DoorTrig, OUTPUT);
-  const int Battery = A0; pinMode(Battery, INPUT);
-  const int RBRx = 0; //RockBlock Serial Into FCom
-  const int RBTx = 1; //RockBlock Serial Out of FCom
-  const int RBSleep = 22; pinMode(RBSleep, OUTPUT);
-  const int RB_RI = 23; pinMode(RB_RI, INPUT);
-  const int RB_RTS = 24; pinMode(RB_RTS, INPUT);
-  const int RB_CTS = 6; pinMode(RB_CTS, INPUT);
-  const int SDApin = 20; //I2C Data
-  const int SCLpin = 21; //I2C Clock
-  const int SolarXPlus = A1; pinMode(SolarXPlus, INPUT); //Solar Current X+
-  const int SolarXMinus = A2; pinMode(SolarXMinus, INPUT); //Solar Current X-
-  const int SolarYPlus = A3; pinMode(SolarYPlus, INPUT); //Solar Current Y+
-  const int SolarYMinus = A4; pinMode(SolarYMinus, INPUT); //Solar Current Y-
-  const int SolarZPlus = A5; pinMode(SolarZPlus, INPUT); //Solar Current Z+
-  const int SolarZMinus = 9; pinMode(SolarZMinus, INPUT); //Solar Current Z-
-  const int SlaveReset = 10; pinMode(SolarZMinus, INPUT); //Slave Fault Handing (via Hard Reset)
-  const int DoorMagEnable = 11; pinMode(DoorMagEnable, OUTPUT); //Allow Door Magnetorquer to work
 }
 
 float getCurrentAmp(int panel) {
@@ -616,37 +619,37 @@ float getCurrentAmp(int panel) {
   switch (panel) {
     case 1:
       if (masterStatusHolder.hardwareAvTable[1]) {
-        current = analogRead(SolarXPlus);
+        current = analogRead(SolarXPlusPin);
       } else {
         current = 0;
       } break;
     case 2:
       if (masterStatusHolder.hardwareAvTable[2]) {
-        current = analogRead(SolarXMinus);
+        current = analogRead(SolarXMinusPin);
       } else {
         current = 0;
       } break;
     case 3:
       if (masterStatusHolder.hardwareAvTable[3]) {
-        current = analogRead(SolarYPlus);
+        current = analogRead(SolarYPlusPin);
       } else {
         current = 0;
       } break;
     case 4:
       if (masterStatusHolder.hardwareAvTable[4]) {
-        current = analogRead(SolarYMinus);
+        current = analogRead(SolarYMinusPin);
       } else {
         current = 0;
       } break;
     case 5:
       if (masterStatusHolder.hardwareAvTable[5]) {
-        current = analogRead(SolarZPlus);
+        current = analogRead(SolarZPlusPin);
       } else {
         current = 0;
       } break;
     case 6:
       if (masterStatusHolder.hardwareAvTable[6]) {
-        current = analogRead(SolarZMinus);
+        current = analogRead(SolarZMinusPin);
       } else {
         current = 0;
       } break;
@@ -850,6 +853,27 @@ void popCommands() {
         case (610):
           masterStatusHolder.numPhotos = (currentCommand[2]);
           break;
+        case (71):
+          masterStatusHolder.MOStatus = (currentCommand[2]);
+          break;
+        case (72):
+          masterStatusHolder.MOMSN = (currentCommand[2]);
+          break;
+        case (73):
+          masterStatusHolder.MTStatus = (currentCommand[2]);
+          break;
+        case (74):
+          masterStatusHolder.MTMSN = (currentCommand[2]);
+          break;
+        case (75):
+          masterStatusHolder.MTLength = (currentCommand[2]);
+          break;
+        case (76):
+          masterStatusHolder.MTQueued = (currentCommand[2]);
+          break;
+        case (77):
+          masterStatusHolder.SBDRT = (currentCommand[2]);
+          break;
       }
     } else {
       //Serial.println("No Command");
@@ -1017,10 +1041,6 @@ void RBDATA() {
   int carReturn = ReceivedMessage.lastIndexOf('\r');
   int R_READY = ReceivedMessage.indexOf('R');
   int Y_READY = ReceivedMessage.lastIndexOf('Y');
-  //Serial.print("Space:");
-  //Serial.println(space);
-  //Serial.print("carReturn:");
-  //Serial.println(carReturn);
 
   String Ring;
   String OK;
@@ -1098,6 +1118,7 @@ void RBDATA() {
 
       //Safe to do here????
       masterStatusHolder.AttemptingLink = false;
+
       break;
 
     case 2: //SBDRT command
@@ -1297,7 +1318,7 @@ void print_binary(int v, int num_places) {
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /*  Watchdog timer support for Arduino Zero
-    by Richard Hole  December 19, 2015
+  by Richard Hole  December 19, 2015
 */
 
 //setupWDT( 11 );
@@ -1432,7 +1453,6 @@ void loop() {
       break;
 
     case (NORMAL_OPS):
-
 
       //Collect Sensor Data
       SensorDataCollect();
@@ -1664,7 +1684,7 @@ void loop() {
   masterStatusHolder.State = masterStatusHolder.NextState;
   //Testing Iterators
   cycle++;
-  //Serial.print("C: ");
+  //Serial.print("C : ");
   //Serial.println(cycle);
 }
 
@@ -1672,6 +1692,7 @@ void loop() {
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 
 
 
