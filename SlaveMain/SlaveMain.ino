@@ -65,6 +65,10 @@ bool ADCS_exit = false;
 #define mediumImage VC0706_320x240
 #define largeImage VC0706_640x480
 
+//SD Card
+#define chipSelect 4
+#define DLSize 320
+
 Adafruit_VC0706 cam = Adafruit_VC0706(&Serial1);
 
 int getTempDegrees() {
@@ -90,6 +94,36 @@ int freeRam () {
   return &stack_dummy - sbrk(0);
 }
 
+void print_binary(int v, int num_places) {
+  int mask = 0, n;
+  for (n = 1; n <= num_places; n++) {
+    mask = (mask << 1) | 0x0001;
+  }
+  v = v & mask;  // truncate v to specified number of places
+  while (num_places) {
+    if (v & (0x0001 << num_places - 1)) {
+      Serial.print("1");
+    } else {
+      Serial.print("0");
+    }
+    --num_places;
+  }
+}
+
+void printArray(uint8_t * arr, int s) {
+  if (s) {
+    for (int i = 0; i < s; i++) {
+      //    for (int j = 0; j < 8; j++) {
+      //      if (arr[i] < pow(2, j))
+      //        Serial.print(B0);
+      //    }
+      print_binary(arr[i], 8);
+      Serial.print(" ");
+    }
+    Serial.println("");
+  }
+}
+
 class floatTuple
 {
   public:
@@ -110,6 +144,161 @@ class floatTuple
 
 };
 
+class RAMImage {
+  public:
+    uint8_t a0[DLSize];
+    uint8_t a1[DLSize];
+    uint8_t a2[DLSize];
+    uint8_t a3[DLSize];
+    uint8_t a4[DLSize];
+    uint8_t a5[DLSize];
+    uint8_t a6[DLSize];
+    uint8_t a7[DLSize];
+    uint8_t a8[DLSize];
+    uint8_t a9[DLSize];
+    uint8_t a10[DLSize];
+    uint8_t a11[DLSize];
+    uint8_t a12[DLSize];
+    uint8_t a13[DLSize];
+    uint8_t a14[DLSize];
+    uint8_t a15[DLSize];
+
+    int sizeArray[16] = {0};
+    int finalIndex = 0;
+    String Filename;
+
+    void printRI() {
+      Serial.println("RAM Loaded Image: " + Filename);
+      Serial.println("   Segments: " + String(finalIndex + 1));
+      int sum = 0; for (int i = 0; i <= finalIndex; i++) {
+        sum += sizeArray[i];
+      }
+      Serial.println("   Total Size: " + String(sum));
+      Serial.println("\nBinary Form:\n");
+
+      printArray(a0, sizeArray[0]);
+      printArray(a1, sizeArray[1]);
+      printArray(a2, sizeArray[2]);
+      printArray(a3, sizeArray[3]);
+      printArray(a4, sizeArray[4]);
+      printArray(a5, sizeArray[5]);
+      printArray(a6, sizeArray[6]);
+      printArray(a7, sizeArray[7]);
+      printArray(a8, sizeArray[8]);
+      printArray(a9, sizeArray[9]);
+      printArray(a10, sizeArray[10]);
+      printArray(a11, sizeArray[11]);
+      printArray(a12, sizeArray[12]);
+      printArray(a13, sizeArray[13]);
+      printArray(a14, sizeArray[14]);
+      printArray(a15, sizeArray[15]);
+    }
+
+    RAMImage() {
+      //Blank
+    }
+
+    void store(uint8_t * data, int dataSize, int index) {
+      int bytes = min(DLSize, dataSize);
+      if (index > finalIndex) {
+        finalIndex = index;
+      }
+      switch (index) {
+        case 0:
+          for (int i = 0; i < bytes; i++) {
+            a0[i] = data[i];
+          }
+          break;
+        case 1:
+          for (int i = 0; i < bytes; i++) {
+            a1[i] = data[i];
+          }
+          break;
+        case 2:
+          for (int i = 0; i < bytes; i++) {
+            a2[i] = data[i];
+          }
+          break;
+        case 3:
+          for (int i = 0; i < bytes; i++) {
+            a3[i] = data[i];
+          }
+          break;
+        case 4:
+          for (int i = 0; i < bytes; i++) {
+            a4[i] = data[i];
+          }
+          break;
+        case 5:
+          for (int i = 0; i < bytes; i++) {
+            a5[i] = data[i];
+          }
+          break;
+        case 6:
+          for (int i = 0; i < bytes; i++) {
+            a6[i] = data[i];
+          } break;
+        case 7:
+          for (int i = 0; i < bytes; i++) {
+            a7[i] = data[i];
+          } break;
+        case 8:
+          for (int i = 0; i < bytes; i++) {
+            a8[i] = data[i];
+          } break;
+        case 9:
+          for (int i = 0; i < bytes; i++) {
+            a9[i] = data[i];
+          } break;
+        case 10:
+          for (int i = 0; i < bytes; i++) {
+            a10[i] = data[i];
+          } break;
+        case 11:
+          for (int i = 0; i < bytes; i++) {
+            a11[i] = data[i];
+          } break;
+        case 12:
+          for (int i = 0; i < bytes; i++) {
+            a12[i] = data[i];
+          } break;
+        case 13:
+          for (int i = 0; i < bytes; i++) {
+            a13[i] = data[i];
+          } break;
+        case 14:
+          for (int i = 0; i < bytes; i++) {
+            a14[i] = data[i];
+          } break;
+        case 15:
+          for (int i = 0; i < bytes; i++) {
+            a15[i] = data[i];
+          } break;
+      }
+    }
+    uint8_t * get(int index) {
+      switch (index) {
+        case 0: return a0;
+        case 1: return a1;
+        case 2: return a2;
+        case 3: return a3;
+        case 4: return a4;
+        case 5: return a5;
+        case 6: return a6;
+        case 7: return a7;
+        case 8: return a8;
+        case 9: return a9;
+        case 10: return a10;
+        case 11: return a11;
+        case 12: return a12;
+        case 13: return a13;
+        case 14: return a14;
+        case 15: return a15;
+      }
+    }
+};
+
+
 class slaveStatus
 {
   public:
@@ -127,8 +316,8 @@ class slaveStatus
     int CurYPWM; // 0 to 255 for Coil Current Level
     int CurZDir; //-1 or 1 for Coil Current Direction
     int CurZPWM; // 0 to 255 for Coil Current Level
-    float gyro[3];
-    float mag[3];
+    double gyro[3];
+    double mag[3];
     int durX;
     int durY;
     int durZ;
@@ -136,17 +325,23 @@ class slaveStatus
     int imageSize;
     unsigned long burstStart;
     unsigned long burstDuration;
+    RAMImage imageR;
+    bool ImageRequested;
 
     //Iridium Network Status Attributes
 
 
 
-    
+
 
     slaveStatus(float t = 0, int L = 0, int r = 0, int n = 0, int XD = 0, int XP = 0,
                 int YD = 0, int YP = 0, int ZD = 0, int ZP = 0,
                 floatTuple g = floatTuple(0, 0, 0), floatTuple M = floatTuple(0, 0, 0),
                 int IS = smallImage, long BD = 120000) {
+
+      imageR = RAMImage();
+      ImageRequested = false;
+
       ADCS_Active = false;
       Temp = t;
       Light = L;
@@ -174,7 +369,7 @@ class slaveStatus
     }
     String toString() {
       String res = "";
-      //
+      //Update Order Below and Update Master Accordingly
       res += "61," + String(resets); //Resets
       res += "!62," + String(Temp); //Temp
       res += "!63," + String(Light); //Light
@@ -187,6 +382,20 @@ class slaveStatus
       res += "!610," + String(numPhotos);
       res += "!";
       return res;
+    }
+    void WriteStatus() {
+      //Copy Order Above and Update Master Accordingly
+      Wire.write((uint8_t)resets);
+      Wire.write((uint8_t)Temp);
+      Wire.write((uint8_t)Light);
+      Wire.write((uint8_t)CurXDir);
+      Wire.write((uint8_t)CurYDir);
+      Wire.write((uint8_t)CurZDir);
+      Wire.write((uint8_t)CurXPWM);
+      Wire.write((uint8_t)CurYPWM);
+      Wire.write((uint8_t)CurZPWM);
+      Wire.write((uint8_t)numPhotos);
+      //10Byte Transmission
     }
     void print() {
       Serial.println(toString());
@@ -203,6 +412,11 @@ class slaveStatus
       CurYPWM = PWM.y;
       CurZDir = Dir.z;
       CurZPWM = PWM.z;
+      /// AnalogWrite ....
+      Serial.print("Direction: ");
+      Dir.print();
+      Serial.print("PWM Values: ");
+      PWM.print();
     }
 };
 slaveStatus StatusHolder;
@@ -254,8 +468,8 @@ void runADCS(double* Bvalues, double* gyroData, double Kp, double Kd) {
   //////////////freeRam ();
   //double J[9] = {0,Bvalues[2],(-1.0)*Bvalues[1],(-1.0)*Bvalues[2], 0, Bvalues[0], Bvalues[1], (-1.0)*Bvalues[0], 0};
 
-  Matrix.Print((double*)Bvalues, 3, 1, "Magn");
-  Matrix.Print((double*)gyroData, 3, 1, "Gyro");
+  //Matrix.Print((double*)Bvalues, 3, 1, "Magn");
+  //Matrix.Print((double*)gyroData, 3, 1, "Gyro");
 
   Matrix.Copy((double*)Bvalues, 1, 3, (double*)Bfield); // create new field to scale for the pseudo-inverse
   //Matrix.Scale((double*)Bfield, 3, 1, E); // scale duplicated Bfield array with E for pseudo-inverse
@@ -271,13 +485,13 @@ void runADCS(double* Bvalues, double* gyroData, double Kp, double Kd) {
   double Jppinv[3][4];
 
   Matrix.Transpose((double*)Jnew, 4, 3, (double*)Jtranspose); // transpose(Jnew)
-  Serial.println ("Step 1 complete");
+  //Serial.println ("Step 1 complete");
   Matrix.Multiply((double*)Jtranspose, (double*)Jnew, 3, 4, 3, (double*)Jp); //transpose(Jnew)*Jnew=Anew
-  Serial.println ("Step 2 complete");
+  //Serial.println ("Step 2 complete");
   Matrix.Invert((double*)Jp, 3); // inverse(transpose(Jnew)*Jnew)=Bnew
-  Serial.println ("Step 3 complete");
+  //Serial.println ("Step 3 complete");
   Matrix.Multiply((double*)Jp, (double*)Jtranspose, 3, 3, 4, (double*)Jppinv); // Bnew*transpose(Jnew)=Cnew
-  Serial.println ("Step 4 complete");
+  //Serial.println ("Step 4 complete");
 
   // redefine Jp as Jpseudo-inverse
   Jp[0][0] = Jppinv[0][0]; Jp[0][1] = Jppinv[0][1]; Jp[0][2] = Jppinv[0][2]; // rescaled up
@@ -294,37 +508,37 @@ void runADCS(double* Bvalues, double* gyroData, double Kp, double Kd) {
   Matrix.Scale((double*)Bfield, 3, 1, 1 / Bmagnitude);
 
   Matrix.Subtract((double*) Bfield, (double*) Bcmd, 3, 1, (double*) BfieldError);
-  Serial.println ("Step 5 complete");
+  //Serial.println ("Step 5 complete");
   Matrix.Subtract((double*) gyroData, (double*) Omegacmd, 3, 1, (double*) OmegaError);
-  Serial.println ("Step 6 complete");
+  //Serial.println ("Step 6 complete");
   //////////////Serial.println(freeRam ());
 
   Matrix.Scale((double*)BfieldError, 3, 1, (Kp / A)); // scale error with proportional gain (updates array)
 
-  Serial.println ("Step 7 complete");
+  //Serial.println ("Step 7 complete");
   Matrix.Scale((double*)OmegaError, 3, 1, (Kd / A)); // scale error with derivative gain (updates array)
-  Serial.println ("Step 8 complete");
+  //Serial.println ("Step 8 complete");
 
   Matrix.Add((double*)BfieldError, (double*)OmegaError, 3, 1, (double*) ErrorSum);
-  Serial.println ("Step 9 complete"); delay(50);
+  //Serial.println ("Step 9 complete"); delay(50);
   Matrix.Scale((double*) ErrorSum, 3, 1, -1.0); // prep error for multiplication with the Jpinv matrix
-  Serial.println ("Step 10 complete"); delay(50);
+  //Serial.println ("Step 10 complete"); delay(50);
 
-  Matrix.Print((double*)ErrorSum, 3, 1, "MATRIX TO CHECK");
-  Matrix.Print((double*)Jp, 3, 3, "Jpinv");
+  //Matrix.Print((double*)ErrorSum, 3, 1, "MATRIX TO CHECK");
+  //Matrix.Print((double*)Jp, 3, 3, "Jpinv");
 
-  Serial.println(freeRam ()); delay(50);
+  //Serial.println(freeRam ()); delay(50);
   Matrix.Multiply((double*) Jp, (double*) ErrorSum, 3, 3, 1, (double*) current);
-  Serial.println ("Step 11 complete");
+  //Serial.println ("Step 11 complete");
 
   //////////////Serial.println(freeRam ());
   //delete (Jp); delete  (Jtranspose); delete  (Jppinv);
   //delete (gyroData); delete (Bvalues); delete (Jnew);
   //delete (OmegaError); delete (BfieldError); delete (Omegacmd); delete (Bcmd);
-  Serial.println("Calling outputPWM"); delay(50);
-  Matrix.Print((double*)current, 3, 1, "Current");
+  //Serial.println("Calling outputPWM"); delay(50);
+  //Matrix.Print((double*)current, 3, 1, "Current");
   outputPWM((double*) current, 3);
-  Serial.println("outputPWM ran"); delay(50);
+  //Serial.println("outputPWM ran"); delay(50);
   //delete (ErrorSum);
 }
 
@@ -338,10 +552,10 @@ void outputPWM(double* I, int length) {
 
   for (int i = 0; i < length; i++) {
     if (abs(I[i]) > Imax) {
-      Serial.println("saturated");
+      //Serial.println("saturated");
       I[i] = Imax * sgn(I[i]);
     }
-    Serial.print(I[i]); Serial.println(" ");
+    //Serial.print(I[i]); Serial.println(" ");
   }
 
   // CREATE PWM OUT SIGNAL
@@ -402,6 +616,9 @@ boolean isInputValid(String input) {
   int q = 0;
   int l = input.length();
   int endT = manualTimeoutS + millis();
+  if (input.equals("")) {
+    return false; //Recently Added
+  }
   while (q < l) {
     char currentChar = input[q];
     q++;
@@ -483,59 +700,70 @@ void PopCommands() {
       //Switch Case on Command[0]
       switch (currentCommand[0]) {
         case (11): //Update Gyro X
-          StatusHolder.gyro[0] = currentCommand[1];
+          StatusHolder.gyro[0] = currentCommand[1] / 1000.0;
           break;
         case (12): //Update Gyro Y
-          StatusHolder.gyro[1] = currentCommand[1];
+          StatusHolder.gyro[1] = currentCommand[1] / 1000.0;
           break;
         case (13): //Update Gyro Z
-          StatusHolder.gyro[2] = currentCommand[1];
+          StatusHolder.gyro[2] = currentCommand[1] / 1000.0;
           break;
         case (21): //Update Mag X
-          StatusHolder.mag[0] = currentCommand[1];
+          StatusHolder.mag[0] = currentCommand[1] / 1000.0;
           break;
         case (22): //Update Mag Y
-          StatusHolder.mag[1] = currentCommand[1];
+          StatusHolder.mag[1] = currentCommand[1] / 1000.0;
           break;
         case (23): //Update Mag Z
-          StatusHolder.mag[2] = currentCommand[1];
+          StatusHolder.mag[2] = currentCommand[1] / 1000.0;
           break;
         case (91): //Activate/Deactive ADCS (1=On,0=Off);
           StatusHolder.ADCS_Active = currentCommand[1];
           break;
         case (101): //Start PhotoBurst
+          StatusHolder.CameraBurst = true;
           StatusHolder.burstStart = millis();
           break;
         case (102): //Set PhotBurst Duration
-          StatusHolder.burstDuration = currentCommand[1]*1000;
+          StatusHolder.burstDuration = currentCommand[1] * 1000;
           break;
         case (103): //Request Photo #<currentCommand[1]>
-          //TODO
+          char filename[8];
+          strcpy(filename, "0000.JPG");
+          filename[0] = '0' + currentCommand[1] / 1000;
+          filename[1] = '0' + currentCommand[1] % 1000 / 100;
+          filename[2] = '0' + currentCommand[1] % 1000 % 100 / 10;
+          filename[3] = '0' + currentCommand[1] % 1000 % 100 % 10;
+          buildImageBuffer(filename);
           break;
       }
     } else {
-      Serial.println("No Command");
+      Serial.println(F("No Command"));
     }
   }
+  Serial.println(F("Done"));
 }
 
 void commandParser(int nBytes) {
   //Need nBytes?
+  digitalWrite(8, HIGH);
   String command = "";
-  while (1 <= Wire.available()) { // loop through all but the last
+  while (Wire.available()) {
     char c = Wire.read(); // receive byte as a character
     command += c;        // print the character
   }
+  Serial.println("Com: " + command);
   //Parse Command
   if (isInputValid(command)) {
-    Serial.println("Command is Valid");
+    Serial.println(F("Command is Valid"));
     buildBuffer(command);
-    Serial.println("Built Command Buffer Successfully");
+    Serial.println(F("Built Command Buffer Successfully"));
     PopCommands();
-
   } else {
-    Serial.println("Invalid Command");
+    Serial.println(F("Invalid Command"));
   }
+  digitalWrite(8, LOW);
+  Serial.println(F("Here"));
 }
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -543,15 +771,20 @@ void commandParser(int nBytes) {
 
 void requestEvent() {
   //Serial.println("Data Request");
-  String r = StatusHolder.toString();
-  char response[r.length()];
-  r.toCharArray(response, r.length());
-  Wire.write(response);
+  digitalWrite(8, HIGH);
+  if (StatusHolder.ImageRequested) {
+    //Image Transfer
+  } else {
+    //General Communication
+    StatusHolder.WriteStatus(); //Check Format
+  }
   lastMasterCom = millis();
+  digitalWrite(8, LOW);
 }
 
 void initalizePinOut() {
   const int MasterReset = A4; pinMode(MasterReset, OUTPUT); //Reset Master Core
+  digitalWrite(MasterReset, HIGH);
   const int CamRx = 0; //Camera Serial into SCom
   const int CamTx = 1; //Camera Serial out of SCom
   const int SDApin = 20; //I2C Data
@@ -575,22 +808,105 @@ void initalizePinOut() {
   const int LED = 13;  pinMode(LED, OUTPUT);
 }
 
-void forcedStall() {
-  digitalWrite(8, HIGH);
-  int test[5] = {4};
-  int x = test[78];
-  Serial.println(x);
-  Serial.println("Didnt crash1");
-  int y = 12.0 / 0.0;
-  Serial.println(y);
-  Serial.println("Didnt crash2");
-  int z;
-  int crash = z + 4;
-  Serial.println(z);
-  Serial.println("Didnt crash3");
-  while (1);
-  digitalWrite(8, LOW);
+
+int takePic(int ImageSize) {
+  // Try to locate the camera
+  cam.begin(); //Need to ensure it worked
+  cam.setImageSize(ImageSize);//cam.setImageSize(VC0706_160x120);
+
+  if (!cam.takePicture()) {
+    return 0;
+  } else {
+    StatusHolder.numPhotos++;
+    //Serial.println("Picture taken!");
+  }
+
+  // Create an image with the name IMAGExx.JPG //ALTER THIS TO STORE THE NEXT AVAILABLE FILENAME
+  char filename[8];
+  strcpy(filename, "0000.JPG");
+  for (int i = 0; i < 9999; i++) {
+    filename[0] = '0' + StatusHolder.numPhotos / 1000;
+    filename[1] = '0' + StatusHolder.numPhotos % 1000 / 100;
+    filename[2] = '0' + StatusHolder.numPhotos % 1000 % 100 / 10;
+    filename[3] = '0' + StatusHolder.numPhotos % 1000 % 100 % 10;
+    if (!SD.exists(filename)) {
+      break;
+    } else {
+      StatusHolder.numPhotos++; //If loss of power resets it but photos were taken prior
+    }
+  }
+
+  File imgFile = SD.open(filename, FILE_WRITE); //Open Image File
+  uint16_t jpglen = cam.frameLength(); //Image Size in Bytes
+  uint16_t bytesWritten = 0;
+
+  //int32_t time = millis();
+  pinMode(8, OUTPUT);
+  // Read all the data up to # bytes!
+  byte wCount = 0; // For counting # of writes
+  while (jpglen > 0) {
+    uint8_t *databuffer;
+    uint8_t bytesToRead = min(64, jpglen); // 64 Byte Reads
+    databuffer = cam.readPicture(bytesToRead);
+    bytesWritten += imgFile.write(databuffer, bytesToRead); //Returns bytes written if needed
+    if (++wCount >= 64) { // Every 2K, give a little feedback so it doesn't appear locked up
+      //Reset Timer Here
+      wCount = 0;
+    }
+    jpglen -= bytesToRead;
+  }
+  imgFile.close();
+  //time = millis() - time;
+  return bytesWritten;
 }
+
+void buildImageBuffer(String Filename) { //Rename to masterstatusholderimagebuffer in future...
+  if (!SD.exists(Filename)) { //File does not exist
+    return;
+  }
+
+  File IMGFile = SD.open(Filename, FILE_READ);
+  uint8_t jpglen = IMGFile.size();
+  //int segments = ((8*jpglen) / 320) + 1;
+  //String imageBuffer[segments];
+  int index = 0;
+  int i = 0;
+  Serial.println("Starting Segmentation");
+
+  while (IMGFile.available()) {
+    //Serial.println("Available: " + String(IMGFile.available()));
+    int bytesToRead = min(320, IMGFile.available());
+    uint8_t segment[bytesToRead - 1];
+    for (int z = 0; z < bytesToRead; z++) {
+      segment[z] = 0;
+    }
+    while (i < bytesToRead) {
+      segment[i] = (uint8_t)IMGFile.read();
+      i++;
+    }
+    //Serial.print("Current Segment " + String(index) + ": ");
+    printArray(segment, i);
+    //Serial.println("");
+    //Serial.println("Here1");
+    //    imageBuffer[index] = segment;
+    StatusHolder.imageR.store(segment, i, index);
+    StatusHolder.imageR.sizeArray[index] = bytesToRead;
+
+    i = 0;
+    index = index + 1;
+    //Serial.println("Here2");
+  }
+
+  IMGFile.close();
+  Serial.println("\nDone");
+  StatusHolder.imageR.finalIndex = index - 1;
+  return;
+}
+
+
+int ledState = HIGH;
+long ledLastTime = 0;
+long lastADCSTime = 0;
 
 void setup() {
   Serial.begin(9600);
@@ -625,63 +941,16 @@ void setup() {
   //    // don't do anything more:
   //    return;
   //  }
+
+  //Image Transfer Test
+  //  buildImageBuffer("0000.JPG");
+  //  Serial.println("\n\nPrint Start");
+  //  StatusHolder.imageR.printRI();
+  //  Serial.println("\nPrint End");
 }
 
-int takePic(int ImageSize) {
-  // Try to locate the camera
-  cam.begin(); //Need to ensure it worked
-  cam.setImageSize(ImageSize);//cam.setImageSize(VC0706_160x120);
-
-  if (!cam.takePicture()) {
-    return 0;
-  } else {
-    StatusHolder.numPhotos++;
-    //Serial.println("Picture taken!");
-  }
-
-  // Create an image with the name IMAGExx.JPG //ALTER THIS TO STORE THE NEXT AVAILABLE FILENAME
-  char filename[13];
-  strcpy(filename, "IMAGE0000.JPG");
-  for (int i = 0; i < 9999; i++) {
-    filename[5] = '0' + StatusHolder.numPhotos / 1000;
-    filename[6] = '0' + StatusHolder.numPhotos % 1000 / 100;
-    filename[7] = '0' + StatusHolder.numPhotos % 1000 % 100 / 10;
-    filename[8] = '0' + StatusHolder.numPhotos % 1000 % 100 % 10;
-    if (!SD.exists(filename)) {
-      break;
-    } else {
-      StatusHolder.numPhotos++; //If loss of power resets it but photos were taken prior
-    }
-  }
-
-  File imgFile = SD.open(filename, FILE_WRITE); //Open Image File
-  uint16_t jpglen = cam.frameLength(); //Image Size in Bytes
-  uint16_t bytesWritten = 0;
-
-  //int32_t time = millis();
-  pinMode(8, OUTPUT);
-  // Read all the data up to # bytes!
-  byte wCount = 0; // For counting # of writes
-  while (jpglen > 0) {
-    uint8_t *buffer;
-    uint8_t bytesToRead = min(64, jpglen); // 64 Byte Reads
-    buffer = cam.readPicture(bytesToRead);
-    bytesWritten += imgFile.write(buffer, bytesToRead); //Returns bytes written if needed
-    if (++wCount >= 64) { // Every 2K, give a little feedback so it doesn't appear locked up
-      //Reset Timer Here
-      wCount = 0;
-    }
-    jpglen -= bytesToRead;
-  }
-  imgFile.close();
-  //time = millis() - time;
-  return bytesWritten;
-}
-
-int ledState = HIGH;
-long ledLastTime = 0;
-long lastADCSTime = 0;
-
+bool SoftwarePWM = false;
+bool disableT = false;
 void loop() {
   StatusHolder.updatePassive();
   StatusHolder.ADCS_Active = false;
@@ -689,67 +958,78 @@ void loop() {
   if (StatusHolder.ADCS_Active) {
     if (millis() - lastADCSTime >= 2000) {
       if (millis() - lastADCSTime >= 2100) {
-        Serial.println("happy");
-        runADCS(mData, gData, Kp, Kd); //placeholders
-        Serial.println("still happy");
+        //Serial.println("happy");
+        runADCS(mData, gData, Kp, Kd);
+        //runADCS(StatusHolder.mag, StatusHolder.gyro, Kp, Kd); //placeholders
+        //Serial.println("still happy");
         //Serial.print("X axis: "); Serial.print(StatusHolder.CurXDir, 20); Serial.print(" "); Serial.println(StatusHolder.CurXPWM, 20);
         //Serial.print("Y axis: "); Serial.print(StatusHolder.CurYDir, 20); Serial.print(" "); Serial.println(StatusHolder.CurYPWM, 20);
         //Serial.print("Z axis: "); Serial.print(StatusHolder.CurZDir, 20); Serial.print(" "); Serial.println(StatusHolder.CurZPWM, 20);
         lastADCSTime = millis();
+        disableT = true;
       } else {
         //torquers off
         //analogWrite(CX_PWM, 0);
         //analogWrite(CY_PWM, 0);
         //analogWrite(CZ_PWM, 0);
-        //floatTuple PWMvaluesForTorquers = floatTuple(0,0,0;
-        //floatTuple PWMdirectionsForTorquers = floatTuple(0,0,0);
-        //StatusHolder.updateTorquers(PWMdirectionsForTorquers, PWMvaluesForTorquers);
+        if (disableT) {
+          floatTuple PWMvaluesForTorquers = floatTuple(0, 0, 0);
+          floatTuple PWMdirectionsForTorquers = floatTuple(0, 0, 0);
+          StatusHolder.updateTorquers(PWMdirectionsForTorquers, PWMvaluesForTorquers);
+          disableT = false;
+          //Request new Gyro Data
+        }
       }
     }
 
     //SoftwarePWM
-    unsigned long ms = micros();
-    if (startCycle) {
-      digitalWrite(A1, HIGH);
-      digitalWrite(A2, HIGH);
-      digitalWrite(A3, HIGH);
-      startCycle = false;
-      NextCycle = ms + cycleLength;
-      LastCycle = ms;
-      p1 = true;
-      p2 = true;
-      p3 = true;
-    }
-    if (p1 && (ms - LastCycle >= StatusHolder.durX)) {
-      //Serial.println("Here");
-      digitalWrite(CX_PWM, LOW);
-      p1 = false;
-    }
-    if (p2 && (ms - LastCycle >= StatusHolder.durY)) {
-      digitalWrite(CY_PWM, LOW);
-      p2 = false;
-    }
-    if (p3 && (ms - LastCycle >= StatusHolder.durZ)) {
-      digitalWrite(CZ_PWM, LOW);
-      p3 = false;
-    }
-    if (ms > NextCycle) {
-      //Serial.print("End");
-      startCycle = true;
-    }
-  } else {
-    if (ADCS_exit) {
-      X_Dir
-      digitalWrite(CX_PWM, LOW);
-      digitalWrite(CY_PWM, LOW);
-      digitalWrite(CZ_PWM, LOW);
-      ADCS_exit = false;
+    if (SoftwarePWM) {
+      unsigned long ms = micros();
+      if (startCycle) {
+        digitalWrite(A1, HIGH);
+        digitalWrite(A2, HIGH);
+        digitalWrite(A3, HIGH);
+        startCycle = false;
+        NextCycle = ms + cycleLength;
+        LastCycle = ms;
+        p1 = true;
+        p2 = true;
+        p3 = true;
+      }
+      if (p1 && (ms - LastCycle >= StatusHolder.durX)) {
+        //Serial.println("Here");
+        digitalWrite(CX_PWM, LOW);
+        p1 = false;
+      }
+      if (p2 && (ms - LastCycle >= StatusHolder.durY)) {
+        digitalWrite(CY_PWM, LOW);
+        p2 = false;
+      }
+      if (p3 && (ms - LastCycle >= StatusHolder.durZ)) {
+        digitalWrite(CZ_PWM, LOW);
+        p3 = false;
+      }
+      if (ms > NextCycle) {
+        //Serial.print("End");
+        startCycle = true;
+      }
+    } else {
+      if (ADCS_exit) {
+        StatusHolder.CurXDir = 0;
+        StatusHolder.CurYDir = 0;
+        StatusHolder.CurZDir = 0;
+        digitalWrite(CX_PWM, LOW);
+        digitalWrite(CY_PWM, LOW);
+        digitalWrite(CZ_PWM, LOW);
+        ADCS_exit = false;
+      }
     }
   }
 
   if (StatusHolder.CameraBurst) {
-    if (millis() < StatusHolder.burstStart + StatusHolder.burstDuration) {
+    if (millis() <= StatusHolder.burstStart + StatusHolder.burstDuration) {
       takePic(StatusHolder.imageSize);
+      StatusHolder.numPhotos++;
     } else {
       StatusHolder.CameraBurst = false;
     }
@@ -763,8 +1043,8 @@ void loop() {
       ledState = LOW;
     }
     digitalWrite(13, ledState);
-    //Serial.print("S Running: ");
-    //Serial.println(millis() - ledLastTime);
+    Serial.print("S Running: ");
+    Serial.println(millis() - ledLastTime);
     ledLastTime = millis();
   }
 
