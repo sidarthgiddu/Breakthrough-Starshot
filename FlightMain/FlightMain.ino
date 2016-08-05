@@ -1304,7 +1304,9 @@ void loop() {
   cycle++;
   //Serial.print("C: ");
   //Serial.println(cycle);
-  if (millis() - lastRBcheck >= (300000)) {
+  
+  //ROCKBLOCK
+  if (millis() - lastRBcheck >= ((long)300000)) {
     RBDATA();
     //responsePing();
     lastRBcheck = millis();
