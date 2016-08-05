@@ -17,7 +17,7 @@
 #define LOW_POWER      9
 #define SAFE_MODE     10
 
-bool ImuWireConnected = true;
+bool ImuWireConnected = false;
 bool WireConnected = true;
 
 
@@ -70,7 +70,7 @@ long recentSlaveCom = 0;
 bool TestSCom = true;
 long lastSComTime = 0;
 long lastSComAttempt = 0;
-int SComTime = 10;
+int SComTime = 2000;
 unsigned long SlaveResetTimeOut = 30 * 1000;
 int slaveDataSize = 100;
 
@@ -162,6 +162,9 @@ void printArray(uint8_t * arr, int s) {
       //      if (arr[i] < pow(2, j))
       //        Serial.print(B0);
       //    }
+//      if (i % DLSize == 0) {
+//        Serial.println(" ");
+//      }
       print_binary(arr[i], 8);
       Serial.print(" ");
     }
@@ -193,7 +196,8 @@ class RAMImage {
     String Filename;
 
     void printRI() {
-      Serial.println("RAM Loaded Image: " + Filename);
+      delay(100);
+      Serial.println("\nRAM Loaded Image: " + Filename);
       Serial.println("   Segments: " + String(finalIndex + 1));
       int sum = 0; for (int i = 0; i <= finalIndex; i++) {
         sum += sizeArray[i];
@@ -223,7 +227,109 @@ class RAMImage {
       //Blank
     }
 
+    void store(uint8_t * data, int dataSize) {
+      //Stores an entire Image, splitting it into segments
+      //Filename = "Transfered Image";
+      int dsize = dataSize;
+      int index = 0;
+      while (true) {
+        if (dsize - DLSize > 0) {
+          sizeArray[index] = DLSize;
+          dsize -= DLSize;
+          Serial.println(sizeArray[index]);
+        } else {
+          sizeArray[index] = dsize;
+          finalIndex = index;
+          Serial.println(sizeArray[index]);
+          break;
+        }
+        index++;
+      }
+
+      if (dataSize >= 0) {
+        for (int i = 0; i < min(dataSize, DLSize); i++) {
+          a0[i] = data[i];
+        }
+      }
+      if (dataSize >= DLSize * 1) {
+        for (int i = 0; i < min(dataSize-DLSize, DLSize); i++) {
+          a1[i] = data[(DLSize * 1) + i];
+        }
+      }
+      if (dataSize >= DLSize * 2) {
+        for (int i = 0; i < min(dataSize-DLSize*2, DLSize); i++) {
+          a2[i] = data[(DLSize * 2) + i];
+        }
+      }
+      if (dataSize >= DLSize * 3) {
+        for (int i = 0; i < min(dataSize-DLSize*3, DLSize); i++) {
+          a3[i] = data[(DLSize * 3) + i];
+        }
+      }
+      if (dataSize >= DLSize * 4) {
+        for (int i = 0; i < min(dataSize-DLSize*4, DLSize); i++) {
+          a4[i] = data[(DLSize * 4) + i];
+        }
+      }
+      if (dataSize >= DLSize * 5) {
+        for (int i = 0; i < min(dataSize-DLSize*5, DLSize); i++) {
+          a5[i] = data[(DLSize * 5) + i];
+        }
+      }
+      if (dataSize >= DLSize * 6) {
+        for (int i = 0; i < min(dataSize-DLSize*6, DLSize); i++) {
+          a6[i] = data[(DLSize * 6) + i];
+        }
+      }
+      if (dataSize >= DLSize * 7) {
+        for (int i = 0; i < min(dataSize-DLSize*7, DLSize); i++) {
+          a7[i] = data[(DLSize * 7) + i];
+        }
+      }
+      if (dataSize >= DLSize * 8) {
+        for (int i = 0; i < min(dataSize-DLSize*8, DLSize); i++) {
+          a8[i] = data[(DLSize * 4) + i];
+        }
+      }
+      if (dataSize >= DLSize * 9) {
+        for (int i = 0; i < min(dataSize-DLSize*9, DLSize); i++) {
+          a9[i] = data[(DLSize * 9) + i];
+        }
+      }
+      if (dataSize >= DLSize * 10) {
+        for (int i = 0; i < min(dataSize-DLSize*10, DLSize); i++) {
+          a10[i] = data[(DLSize * 10) + i];
+        }
+      }
+      if (dataSize >= DLSize * 11) {
+        for (int i = 0; i < min(dataSize-DLSize*11, DLSize); i++) {
+          a11[i] = data[(DLSize * 11) + i];
+        }
+      }
+      if (dataSize >= DLSize * 12) {
+        for (int i = 0; i < min(dataSize-DLSize*12, DLSize); i++) {
+          a12[i] = data[(DLSize * 12) + i];
+        }
+      }
+      if (dataSize >= DLSize * 13) {
+        for (int i = 0; i < min(dataSize-DLSize*13, DLSize); i++) {
+          a13[i] = data[(DLSize * 13) + i];
+        }
+      }
+      if (dataSize >= DLSize * 14) {
+        for (int i = 0; i < min(dataSize-DLSize*14, DLSize); i++) {
+          a14[i] = data[(DLSize * 14) + i];
+        }
+      }
+      if (dataSize >= DLSize * 15) {
+        for (int i = 0; i < min(dataSize-DLSize*15, DLSize); i++) {
+          a15[i] = data[(DLSize * 15) + i];
+        }
+      }
+    }
+
     void store(uint8_t * data, int dataSize, int index) {
+      //Stores a segment in the RAMImage
       int bytes = min(DLSize, dataSize);
       if (index > finalIndex) {
         finalIndex = index;
@@ -814,65 +920,77 @@ void popCommands() {
       //Place the Command ID in the "#"
 
       //Commands
-      switch (currentCommand[1]) {
+      switch (currentCommand[0]) {
         case (91): //Arm Deployment
           masterStatusHolder.NextState = DEPLOY_ARMED;
         case (92):
-          deployTimeOut = (currentCommand[2]) * 1000;
+          deployTimeOut = (currentCommand[1]) * 1000;
           break;
         case (93):
-          manualTimeout = (currentCommand[2]);
+          manualTimeout = (currentCommand[1]);
           break;
         case (61):
-          masterStatusHolder.MResets = (currentCommand[2]);
+          masterStatusHolder.MResets = (currentCommand[1]);
           break;
         case (62):
-          masterStatusHolder.AnalogTemp = (currentCommand[2]);
+          masterStatusHolder.AnalogTemp = (currentCommand[1]);
           break;
         case (63):
-          masterStatusHolder.LightSense = (currentCommand[2]);
+          masterStatusHolder.LightSense = (currentCommand[1]);
           break;
         case (64):
-          masterStatusHolder.CurXDir = (currentCommand[2]);
+          masterStatusHolder.CurXDir = (currentCommand[1]);
           break;
         case (65):
-          masterStatusHolder.CurYDir = (currentCommand[2]);
+          masterStatusHolder.CurYDir = (currentCommand[1]);
           break;
         case (66):
-          masterStatusHolder.CurZDir = (currentCommand[2]);
+          masterStatusHolder.CurZDir = (currentCommand[1]);
           break;
         case (67):
-          masterStatusHolder.CurXPWM = (currentCommand[2]);
+          masterStatusHolder.CurXPWM = (currentCommand[1]);
           break;
         case (68):
-          masterStatusHolder.CurYPWM = (currentCommand[2]);
+          masterStatusHolder.CurYPWM = (currentCommand[1]);
           break;
         case (69):
-          masterStatusHolder.CurZPWM = (currentCommand[2]);
+          masterStatusHolder.CurZPWM = (currentCommand[1]);
           break;
         case (610):
-          masterStatusHolder.numPhotos = (currentCommand[2]);
+          masterStatusHolder.numPhotos = (currentCommand[1]);
           break;
         case (71):
-          masterStatusHolder.MOStatus = (currentCommand[2]);
+          masterStatusHolder.MOStatus = (currentCommand[1]);
           break;
         case (72):
-          masterStatusHolder.MOMSN = (currentCommand[2]);
+          masterStatusHolder.MOMSN = (currentCommand[1]);
           break;
         case (73):
-          masterStatusHolder.MTStatus = (currentCommand[2]);
+          masterStatusHolder.MTStatus = (currentCommand[1]);
           break;
         case (74):
-          masterStatusHolder.MTMSN = (currentCommand[2]);
+          masterStatusHolder.MTMSN = (currentCommand[1]);
           break;
         case (75):
-          masterStatusHolder.MTLength = (currentCommand[2]);
+          masterStatusHolder.MTLength = (currentCommand[1]);
           break;
         case (76):
-          masterStatusHolder.MTQueued = (currentCommand[2]);
+          masterStatusHolder.MTQueued = (currentCommand[1]);
           break;
         case (77):
-          masterStatusHolder.SBDRT = (currentCommand[2]);
+          masterStatusHolder.SBDRT = (currentCommand[1]);
+          break;
+        case (81):
+          masterStatusHolder.RequestingImage = true;
+          String com = "103," + String(currentCommand[1]) + "!";
+          sendSCommand(com);
+          char filename[8];
+          strcpy(filename, "0000.JPG");
+          filename[0] = '0' + currentCommand[1] / 1000;
+          filename[1] = '0' + currentCommand[1] % 1000 / 100;
+          filename[2] = '0' + currentCommand[1] % 1000 % 100 / 10;
+          filename[3] = '0' + currentCommand[1] % 1000 % 100 % 10;
+          masterStatusHolder.imageR.Filename = filename;
           break;
       }
     } else {
@@ -924,24 +1042,52 @@ void readSerialAdd2Buffer() {
 
 */
 
-void sendSCommand(char data[]) {
-  //  Serial.print("Command Sent to Slave: ");
-  //  Serial.println(data);
+void sendSCommand(String data) {
+  Serial.print("Command Sent to Slave: ");
+  Serial.println(data);
+  char com[data.length() + 1];
+  data.toCharArray(com, data.length() + 1);
   if (WireConnected) {
     Wire.beginTransmission(8); // transmit to device #8
-    Wire.write(data);   // sends String
+    Wire.write(com);   // sends String
     Wire.endTransmission();    // stop transmitting
   }
 }
 
+uint8_t segment[4000];
+int dataIndex = 0;
+bool lastRead = false;
 bool requestFromSlave() {
-  //Serial.println("Requesting");
+  Serial.println("Requesting");
   String res = "";
   bool success = false;
   if (WireConnected) {
     if (masterStatusHolder.RequestingImage) {
-      Wire.requestFrom(8,4000,true); // request 4000 bytes from slave device #8
-      
+      Wire.requestFrom(8, 16); // request 64 bytes from slave device #8
+      //delay(1);
+      //int i = 0;
+      while (Wire.available()) {
+        //Serial.println("AV: "+String(Wire.available()));
+        segment[dataIndex] = (uint8_t)Wire.read();
+        Serial.println(segment[dataIndex]);
+        dataIndex++;
+        //i++;
+      }
+      //printArray(segment, dataIndex);
+      Serial.println(dataIndex);
+      //Serial.println("i: "+String(i));
+      if (dataIndex >= 3612 - 1) {
+        Serial.println("Last");
+        lastRead = true;
+        //printArray(segment, dataIndex);
+        masterStatusHolder.RequestingImage = false;
+        masterStatusHolder.imageR.store(segment, dataIndex);
+
+        //Will reset Slave from ImageTransmit Mode
+      } else {
+        Serial.println("Not Last");
+      }
+
     } else {
       Wire.requestFrom(8, 10, true); // request 10 bytes from slave device #8
       //delay(50);
@@ -1360,8 +1506,23 @@ void setupWDT( uint8_t period) {
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+void Stall() {
+  stall = true;
+  int i = 0;
+  Serial.println("Awaiting Input");
+  while (stall) {
+    digitalWrite(8, HIGH);
+    delay(140);
+    digitalWrite(8, LOW);
+    delay(140);
+    //Serial.println(("Stall: ") + String(i));
+    i++;
+  }
+}
+
 //// Main Loop
 
+const int IMAGE_REQUEST = 888;
 void setup()
 {
   Serial.begin(9600);
@@ -1376,15 +1537,8 @@ void setup()
   pinMode(8, OUTPUT);
   delay(1000);
 
-  int i = 0;
-  while (stall) {
-    digitalWrite(8, HIGH);
-    delay(140);
-    digitalWrite(8, LOW);
-    delay(140);
-    Serial.println(("Initialization Stall: ") + String(i));
-    i++;
-  }
+  Stall();
+
   digitalWrite(8, HIGH);
 
   cBuf = commandBuffer();
@@ -1398,30 +1552,54 @@ void setup()
   //  Serial.println("there");
 
   //Testing Image Downlink
-//  SD.begin(chipSelect);
-//  buildImageBuffer(Filename);
-//  Serial.println("\n\nPrint Start");
-//  masterStatusHolder.imageR.printRI();
-//  Serial.println("\nPrint End");
+  //  SD.begin(chipSelect);
+  //  buildImageBuffer(Filename);
+  //  Serial.println("\n\nPrint Start");
+  //  masterStatusHolder.imageR.printRI();
+  //  Serial.println("\nPrint End");
 
-  Serial.println(F("Starting IMU"));
-  while (!masterStatusHolder.imu.begin()) { // && millis() < endT) {
-    Serial.println(F("IMU Not working"));
-    delay(30);
-  }
+  //  Serial.println(F("Starting IMU"));
+  //  while (!masterStatusHolder.imu.begin()) { // && millis() < endT) {
+  //    Serial.println(F("IMU Not working"));
+  //    delay(30);
+  //  }
 
 
   //masterStatusHolder.configureSensor(); //runs configureSensor function
   digitalWrite(8, LOW);
-
+  sendSCommand("103,31!");
+  masterStatusHolder.RequestingImage = true;
+  masterStatusHolder.State = IMAGE_REQUEST;
+   masterStatusHolder.NextState = IMAGE_REQUEST;
 }
 
 bool downlinkStaged = false;
 bool ImageDownlink_Active = true;
 const int DOWNLINK_TESTING = 999;
+//const int IMAGE_REQUEST = 888;
 void loop() {
-  masterStatusHolder.State = DOWNLINK_TESTING;
+  //masterStatusHolder.State = IMAGE_REQUEST;
   switch (masterStatusHolder.State) {
+    case (IMAGE_REQUEST):
+      Serial.println("Here");
+      //Serial.println(masterStatusHolder.RequestingImage);
+      //delay(100);
+      if (masterStatusHolder.RequestingImage) {
+        Serial.println("Image Data Requested");
+        requestFromSlave();
+        //delay(5);
+        if (lastRead) {
+          lastRead = false;
+          masterStatusHolder.NextState = NORMAL_OPS;//DOWNLINK_TESTING ?
+          sendSCommand("104,1!");
+          Serial.println("");
+          Stall();
+          masterStatusHolder.imageR.printRI();
+          Stall();
+          Serial.println("");
+        }
+      }
+      break;
 
     case (DOWNLINK_TESTING):
       if (ImageDownlink_Active) {
@@ -1474,8 +1652,9 @@ void loop() {
       //Test Slave Communication
       if (TestSCom && WireConnected) {
         //unsigned long t = millis();
-        if (millis() - lastSComAttempt >= SComTime || commandedSC) {
+        if (millis() - lastSComAttempt >= SComTime) {
           lastSComAttempt = millis();
+          Serial.println("\nSlave IMU transfer");
           sendIMUToSlave();
           bool SlaveResponse = requestFromSlave();
 

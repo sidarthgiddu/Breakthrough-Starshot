@@ -1,6 +1,10 @@
 #include <SD.h>
 #include <SPI.h>
+#include <Adafruit_LSM9DS0.h>
+#include <Adafruit_Sensor.h>
 #define chipSelect 4
+#define DLSize 320
+
 //We have 4 values to define into Masterstatusholder (filing cabinet).
 bool Downlink_Active; //True/False is downlinking occurring?...
 int imgDownlinkArray[15]; //Array will hold at max 15 chunks of our image
@@ -28,7 +32,6 @@ void printArray(uint8_t * arr, int s) {
   }
 }
 
-#define DLSize 320
 class RAMImage {
   public:
     uint8_t a0[DLSize];
@@ -78,7 +81,11 @@ class RAMImage {
       printArray(a14, sizeArray[14]);
       printArray(a15, sizeArray[15]);
     }
-    RAMImage() {}
+
+    RAMImage() {
+      //Blank
+    }
+
     void store(uint8_t * data, int dataSize, int index) {
       int bytes = min(DLSize, dataSize);
       if (index > finalIndex) {
@@ -178,7 +185,169 @@ class RAMImage {
       }
     }
 };
-RAMImage imageR = RAMImage();
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////
+class masterStatus {
+  public:
+    Adafruit_LSM9DS0 imu;
+
+    int State;
+    int NextState;
+    float Mag[3];
+    float Gyro[3];
+    float Accel[3];
+    int ImuTemp;
+    float Battery;
+    float SolarXPlus;
+    float SolarXMinus;
+    float SolarYPlus;
+    float SolarYMinus;
+    float SolarZPlus;
+    float SolarZMinus;
+    int DoorSense;
+    float LightSense;
+    float AnalogTemp;
+    int numPhotos;
+    int IMUWorking;
+    int SlaveWorking;
+    int Resets;
+    bool PayloadDeployed;
+    int missionStatus; //0=incomplete, 1=success, 2=failure
+
+    RAMImage imageR;
+    int currentSegment;
+
+    float * IMUData[3];
+    float * LIGHTData;
+    float * AccelData[3];
+    int dataIndex;
+    int accelIndex;
+
+    bool ADCS_Active;
+    int MResets;
+    int CurXDir; //-1 or 1 for Coil Current Direction
+    int CurXPWM; // 0 to 255 for Coil Current Level
+    int CurYDir; //-1 or 1 for Coil Current Direction
+    int CurYPWM; // 0 to 255 for Coil Current Level
+    int CurZDir; //-1 or 1 for Coil Current Direction
+    int CurZPWM; // 0 to 255 for Coil Current Level
+
+    //ROCKBLOCKVARIABLES
+    int MOStatus;
+    int MOMSN;
+    int MTStatus;
+    int MTMSN;
+    int MTLength;
+    int MTQueued;
+    String SBDRT;
+    int LastMsgType;
+    //LastMsgType values:
+    //0 = inval
+    //1 = ok
+    //2 = ring
+    //3 = error
+    //4 = ready
+
+    masterStatus( int IT = 0,
+                  float B = 0, float SolarXP = 0, float SolarXM = 0, float SolarYP = 0, float SolarYM = 0,
+                  float SolarZP = 0, float SolarZM = 0, int DS = 0, float LS = 0,
+                  float AT = 0, int nP = 0, bool IMUW = true, bool SW = true, int R = 0, int MR = 0,
+                  int XD = 0, int XP = 0, int YD = 0, int YP = 0, int ZD = 0, int ZP = 0, bool ADCS = false,
+                  bool pd = false, int mS = 0 ) {
+
+      imageR = RAMImage();
+      currentSegment = 0;
+      
+      NextState = State;
+      PayloadDeployed = pd;
+      imu = Adafruit_LSM9DS0();
+      ImuTemp = IT;
+      Battery = B;
+      SolarXPlus = SolarXP;
+      SolarXMinus = SolarXM;
+      SolarYPlus = SolarYP;
+      SolarYMinus = SolarYM;
+      SolarZPlus = SolarZP;
+      SolarZMinus = SolarZM;
+      DoorSense = DS;
+      LightSense = LS;
+      AnalogTemp = AT;
+      numPhotos = nP;
+      IMUWorking = IMUW;
+      SlaveWorking = SW;
+      Resets = R;
+      missionStatus = mS;
+
+      MOStatus = 0;
+      MOMSN = 0;
+      MTStatus = 0;
+      MTMSN = 0;
+      MTLength = 0;
+      MTQueued = 0;
+      LastMsgType = 0;
+
+      ADCS_Active = ADCS;
+      MResets = MR;
+      CurXDir = XD;
+      CurXPWM = XP;
+      CurYDir = YD;
+      CurYPWM = YP;
+      CurZDir = ZD;
+      CurZPWM = ZP;
+
+      IMUData[3][360] = {0};
+      LIGHTData[360] = {0};
+      dataIndex = 0;
+      accelIndex = 0;
+    }
+
+};
+masterStatus masterStatusHolder;
+////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////
+int downlinkSegment(int segIndex) {
+  uint8_t * Data = masterStatusHolder.imageR.get(segIndex);
+  int DataSize = masterStatusHolder.imageR.sizeArray[segIndex];
+
+  Serial.println("Begining Downlink");
+
+  Serial1.print("AT+SBDWB=");
+  Serial1.print(DataSize);
+  Serial1.print("\r");
+
+  /////////////////////////////////
+  Serial.println("Response 1 >>");
+  while (Serial1.available()) {
+    Serial.print((char)Serial1.read());
+  }
+  Serial.println("\n<<Response 1");
+ /////////////////////////////////
+ 
+  uint16_t checksum = 0;
+  for (int i = 0; i < DataSize; ++i)
+  {
+    Serial1.write(Data[i]);
+    checksum += (uint16_t)Data[i];
+  }
+  //printArray(imageBuffer[0], DataSize);
+  Serial1.write(checksum >> 8);
+  Serial1.write(checksum & 0xFF);
+  delay(100);
+  
+   /////////////////////////////////Ok?
+  Serial.println("Response 2 >> ");
+  while (Serial1.available()) {
+    Serial.print((char)Serial1.read());
+  }
+  Serial.println("\n<< Response 2");
+   /////////////////////////////////
+   
+  return 0;
+}
+
 
 void print_binary(int v, int num_places) {
   int mask = 0, n;
@@ -195,12 +364,7 @@ void print_binary(int v, int num_places) {
     --num_places;
   }
 }
-void printImageBuffer() {
-  //  for (int i = 0; i <= finalIndex; i++) {
-  //    printArray(imageBuffer[i], sizeArray[i]);
-  //    Serial.println("");
-  //  }
-}
+
 void buildImageBuffer(String Filename) { //Rename to masterstatusholderimagebuffer in future...
   IMGFile = SD.open(Filename, FILE_READ);
   uint8_t jpglen = IMGFile.size();
@@ -225,75 +389,87 @@ void buildImageBuffer(String Filename) { //Rename to masterstatusholderimagebuff
     //Serial.println("");
     //Serial.println("Here1");
     //    imageBuffer[index] = segment;
-    imageR.store(segment, i, index);
-    imageR.sizeArray[index] = bytesToRead;
+    masterStatusHolder.imageR.store(segment, i, index);
+    masterStatusHolder.imageR.sizeArray[index] = bytesToRead;
 
     i = 0;
     index = index + 1;
     //Serial.println("Here2");
-    //Serial.println("");
-    //Serial.println("");
   }
   Serial.println("\nDone");
   finalIndex = index - 1;
   Serial.println(finalIndex);
   return;
 }
+//////////////////////////////////////////////////////////////////////////////
+//void initializeRockblock(){
+//  Serial1.print("AT");
+//  // might be redundant during flight /\
+//  while (!masterStatus.LastMsgType == 1) {
+//    Serial1.print("AT&K0");
+//    while (!masterStatusHolder.LastMsgType == 1){
+//        }
+//      }
+//    } // expexted declaration
 
-int downlinkSegment(int segIndex) {
-  uint8_t * Data = imageR.get(segIndex);
-  int DataSize = imageR.sizeArray[segIndex];
-  Serial.println("Begining Downlink");
-  Serial1.print("AT+SBDWB=");
-  Serial1.print(DataSize);
-  Serial1.print("\r");
+//void downlinkImage() {
+//  buildImageBuffer(Filename);
+//  // initiate SBD session
+//  int i = 0;
+//  bool g = true;
+//  while (i <= masterStatusHolder.imageR.finalIndex) {
+//    delay (1000);
+//    if (g == true) {
+//      Serial1.print("AT+SBDIX");
+//      g = false;
+//    }
+//    if (masterStatusHolder.MOStatus == 0 || i == 0) {
+//      downlinkSegment(i);
+//      i++;
+//      masterStatusHolder.MOStatus = 13;
+//      g = true;
+//    }
+//  }
+//}
+// whitespace trim necessary?
 
-  delay(100);
-  //Wait for Ready
-  Serial.println("Response 1 >>");
-  while (Serial1.available()) {
-    Serial.print((char)Serial1.read());
-  }
+//////////////////////////////////////////////////////////////////////////////
 
-  Serial.println("\n<<Response 1");
-  uint16_t checksum = 0;
-  for (int i = 0; i < DataSize; ++i)
-  {
-    Serial1.write(Data[i]);
-    checksum += (uint16_t)Data[i];
-  }
-  //printArray(imageBuffer[0], DataSize);
-  Serial1.write(checksum >> 8);
-  Serial1.write(checksum & 0xFF);
-
-  delay(100);
-  //Ok?
-  Serial.println("Response 2 >> ");
-  while (Serial1.available()) {
-    Serial.print((char)Serial1.read());
-  }
-  Serial.println("\n<< Response 2");
-  return 0;
-}
 
 void setup() {
   Serial.begin(9600);
   Serial1.begin(19200);
   delay(2000);
 
-  Serial.println("Initialize SD...");
   SD.begin(chipSelect);
-  Serial.println("Success");
 
-  buildImageBuffer(Filename);
-  Serial.println("\n\nPrint Start");
-  imageR.printRI();
-  Serial.println("\nPrint End");
-  downlinkSegment(0);
+
+  //  InitializeRockblock();
+  //  buildImageBuffer(Filename);
+  //  Serial.println("\n\nPrint Start");
+  //  imageR.printRI();
+  //  Serial.println("\nPrint End");
+  //  downlinkSegment(0);
 }
 
+DownlinkState = true;
 void loop() {
   //  Serial.println(Filename);
   delay(1000);
   Serial.println("Success");
+
+  if (DownlinkState) {
+    if (masterStatusHolder.currentSegment <= masterStatusHolder.imageR.finalIndex) {
+      if (masterStatusHolder.MOStatus == 0 || masterStatusHolder.currentSegment == 0) {
+        downlinkSegment(masterStatusHolder.currentSegment);
+        masterStatusHolder.MOStatus = 13;
+      } else {
+        //SBDIX
+      }
+    }
+  }
 }
+
+
+
+'
