@@ -117,6 +117,9 @@ void printArray(uint8_t * arr, int s) {
       //      if (arr[i] < pow(2, j))
       //        Serial.print(B0);
       //    }
+      if (i % DLSize == 0) {
+        Serial.println("");
+      }
       print_binary(arr[i], 8);
       Serial.print(" ");
     }
@@ -144,156 +147,32 @@ class floatTuple
 
 };
 
-class RAMImage {
+class RAMImageSlave {
   public:
-    uint8_t a0[DLSize];
-    uint8_t a1[DLSize];
-    uint8_t a2[DLSize];
-    uint8_t a3[DLSize];
-    uint8_t a4[DLSize];
-    uint8_t a5[DLSize];
-    uint8_t a6[DLSize];
-    uint8_t a7[DLSize];
-    uint8_t a8[DLSize];
-    uint8_t a9[DLSize];
-    uint8_t a10[DLSize];
-    uint8_t a11[DLSize];
-    uint8_t a12[DLSize];
-    uint8_t a13[DLSize];
-    uint8_t a14[DLSize];
-    uint8_t a15[DLSize];
+    uint8_t a[DLSize * 16];
 
-    int sizeArray[16] = {0};
-    int finalIndex = 0;
+    int photosize;
     String Filename;
+    volatile int currentIndex;
 
     void printRI() {
       Serial.println("RAM Loaded Image: " + Filename);
-      Serial.println("   Segments: " + String(finalIndex + 1));
-      int sum = 0; for (int i = 0; i <= finalIndex; i++) {
-        sum += sizeArray[i];
-      }
-      Serial.println("   Total Size: " + String(sum));
-      Serial.println("\nBinary Form:\n");
-
-      printArray(a0, sizeArray[0]);
-      printArray(a1, sizeArray[1]);
-      printArray(a2, sizeArray[2]);
-      printArray(a3, sizeArray[3]);
-      printArray(a4, sizeArray[4]);
-      printArray(a5, sizeArray[5]);
-      printArray(a6, sizeArray[6]);
-      printArray(a7, sizeArray[7]);
-      printArray(a8, sizeArray[8]);
-      printArray(a9, sizeArray[9]);
-      printArray(a10, sizeArray[10]);
-      printArray(a11, sizeArray[11]);
-      printArray(a12, sizeArray[12]);
-      printArray(a13, sizeArray[13]);
-      printArray(a14, sizeArray[14]);
-      printArray(a15, sizeArray[15]);
+      Serial.println("   Total Size: " + String(photosize));
+      Serial.println("   Current Index: " + String(currentIndex));
+      Serial.println("\nBinary Form:");
+      printArray(a, photosize);
     }
 
-    RAMImage() {
-      //Blank
+    RAMImageSlave() {
+      int photosize = 0;
+      String Filename = "";
+      int currentIndex = 0;
     }
 
-    void store(uint8_t * data, int dataSize, int index) {
-      int bytes = min(DLSize, dataSize);
-      if (index > finalIndex) {
-        finalIndex = index;
-      }
-      switch (index) {
-        case 0:
-          for (int i = 0; i < bytes; i++) {
-            a0[i] = data[i];
-          }
-          break;
-        case 1:
-          for (int i = 0; i < bytes; i++) {
-            a1[i] = data[i];
-          }
-          break;
-        case 2:
-          for (int i = 0; i < bytes; i++) {
-            a2[i] = data[i];
-          }
-          break;
-        case 3:
-          for (int i = 0; i < bytes; i++) {
-            a3[i] = data[i];
-          }
-          break;
-        case 4:
-          for (int i = 0; i < bytes; i++) {
-            a4[i] = data[i];
-          }
-          break;
-        case 5:
-          for (int i = 0; i < bytes; i++) {
-            a5[i] = data[i];
-          }
-          break;
-        case 6:
-          for (int i = 0; i < bytes; i++) {
-            a6[i] = data[i];
-          } break;
-        case 7:
-          for (int i = 0; i < bytes; i++) {
-            a7[i] = data[i];
-          } break;
-        case 8:
-          for (int i = 0; i < bytes; i++) {
-            a8[i] = data[i];
-          } break;
-        case 9:
-          for (int i = 0; i < bytes; i++) {
-            a9[i] = data[i];
-          } break;
-        case 10:
-          for (int i = 0; i < bytes; i++) {
-            a10[i] = data[i];
-          } break;
-        case 11:
-          for (int i = 0; i < bytes; i++) {
-            a11[i] = data[i];
-          } break;
-        case 12:
-          for (int i = 0; i < bytes; i++) {
-            a12[i] = data[i];
-          } break;
-        case 13:
-          for (int i = 0; i < bytes; i++) {
-            a13[i] = data[i];
-          } break;
-        case 14:
-          for (int i = 0; i < bytes; i++) {
-            a14[i] = data[i];
-          } break;
-        case 15:
-          for (int i = 0; i < bytes; i++) {
-            a15[i] = data[i];
-          } break;
-      }
-    }
-    uint8_t * get(int index) {
-      switch (index) {
-        case 0: return a0;
-        case 1: return a1;
-        case 2: return a2;
-        case 3: return a3;
-        case 4: return a4;
-        case 5: return a5;
-        case 6: return a6;
-        case 7: return a7;
-        case 8: return a8;
-        case 9: return a9;
-        case 10: return a10;
-        case 11: return a11;
-        case 12: return a12;
-        case 13: return a13;
-        case 14: return a14;
-        case 15: return a15;
+    void store(uint8_t * data, int dataSize) {
+      //Can't Handle images over DLSize*16 (~5kB);
+      for (int i = 0; i < dataSize; i++) {
+        a[i] = data[i];
       }
     }
 };
@@ -325,8 +204,8 @@ class slaveStatus
     int imageSize;
     unsigned long burstStart;
     unsigned long burstDuration;
-    RAMImage imageR;
-    bool ImageRequested;
+    RAMImageSlave imageR;
+    volatile bool ImageRequested;
 
     //Iridium Network Status Attributes
 
@@ -339,7 +218,7 @@ class slaveStatus
                 floatTuple g = floatTuple(0, 0, 0), floatTuple M = floatTuple(0, 0, 0),
                 int IS = smallImage, long BD = 120000) {
 
-      imageR = RAMImage();
+      imageR = RAMImageSlave();
       ImageRequested = false;
 
       ADCS_Active = false;
@@ -617,6 +496,7 @@ boolean isInputValid(String input) {
   int l = input.length();
   int endT = manualTimeoutS + millis();
   if (input.equals("")) {
+    Serial.println("Empty");
     return false; //Recently Added
   }
   while (q < l) {
@@ -729,12 +609,22 @@ void PopCommands() {
           break;
         case (103): //Request Photo #<currentCommand[1]>
           char filename[8];
-          strcpy(filename, "0000.JPG");
+          strcpy(filename, "0000.jpg");
           filename[0] = '0' + currentCommand[1] / 1000;
           filename[1] = '0' + currentCommand[1] % 1000 / 100;
           filename[2] = '0' + currentCommand[1] % 1000 % 100 / 10;
           filename[3] = '0' + currentCommand[1] % 1000 % 100 % 10;
-          buildImageBuffer(filename);
+          //StatusHolder.imageR = RAMImageSlave();
+          //buildImageBuffer(filename);
+          Wire.end();
+          Wire.begin(8);
+          buildImageBuffer("IMAGE037.jpg");
+          Serial.println("Image");
+          StatusHolder.imageR.printRI();
+          StatusHolder.ImageRequested = true;
+          break;
+        case (104): //Image Successfully Recieved
+          StatusHolder.ImageRequested = false;
           break;
       }
     } else {
@@ -745,43 +635,81 @@ void PopCommands() {
 }
 
 void commandParser(int nBytes) {
-  //Need nBytes?
+  if (nBytes <= 1) {
+    Serial.println("PCALL");
+    return;
+  }
   digitalWrite(8, HIGH);
   String command = "";
   while (Wire.available()) {
-    char c = Wire.read(); // receive byte as a character
-    command += c;        // print the character
+    command += (char)Wire.read();
   }
-  Serial.println("Com: " + command);
+  //Serial.println("Com: " + command);
   //Parse Command
+  Serial.print("Command: |" + command);
+  Serial.println("|" + String(nBytes));
   if (isInputValid(command)) {
-    Serial.println(F("Command is Valid"));
+    Serial.println(F("Commands are Valid"));
     buildBuffer(command);
     Serial.println(F("Built Command Buffer Successfully"));
     PopCommands();
   } else {
-    Serial.println(F("Invalid Command"));
+    Serial.println(F("Invalid Commands"));
   }
   digitalWrite(8, LOW);
-  Serial.println(F("Here"));
+  //Serial.println(F("Here"));
 }
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
+bool test = true;
+volatile int totalBytesSent = 0;
 void requestEvent() {
   //Serial.println("Data Request");
   digitalWrite(8, HIGH);
-  if (StatusHolder.ImageRequested) {
-    //Image Transfer
-  } else {
-    //General Communication
-    StatusHolder.WriteStatus(); //Check Format
-  }
-  lastMasterCom = millis();
-  digitalWrite(8, LOW);
-}
+    if (StatusHolder.ImageRequested) { //Image Request
+            Serial.println("Image Data Request");
+            int bytesSent = 0;
+            for (int i = 0; i < 16; i++) {
+              bytesSent += Wire.write(StatusHolder.imageR.a[StatusHolder.imageR.currentIndex]);
+              Serial.println(StatusHolder.imageR.a[StatusHolder.imageR.currentIndex]);
+              StatusHolder.imageR.currentIndex++;
+              if (StatusHolder.imageR.currentIndex >= StatusHolder.imageR.photosize) {
+                break;
+              }
+            }
+            Serial.println("bytesSent: " + String(bytesSent));
+            totalBytesSent += bytesSent;
+            if (StatusHolder.imageR.currentIndex >= StatusHolder.imageR.photosize) {
+              Serial.println("Finished Data, Sent: "+String(totalBytesSent));
+              StatusHolder.ImageRequested = false;
+              StatusHolder.imageR.currentIndex = 0;
+              totalBytesSent = 0;
+              test = false;
+              return;
+            }
+      
+//      Serial.println("Image Data Request");
+//      for (int i = 0; i < StatusHolder.imageR.photosize; i++) {
+//        totalBytesSent += Wire.write(StatusHolder.imageR.a[i]);
+//        Serial.println(StatusHolder.imageR.a[i]);
+//        Serial.println(StatusHolder.imageR.photosize-i);
+//      }
+//      Serial.println("Finished Data, Sent: " + String(totalBytesSent));
+//      StatusHolder.ImageRequested = false;
+//      StatusHolder.imageR.currentIndex = 0;
+//      totalBytesSent = 0;
+//      test = false;
+//      return;
 
+    } else {//General Communication
+      //StatusHolder.WriteStatus(); //Check Format
+    }
+
+    lastMasterCom = millis();
+    digitalWrite(8, LOW);
+  
+}
 void initalizePinOut() {
   const int MasterReset = A4; pinMode(MasterReset, OUTPUT); //Reset Master Core
   digitalWrite(MasterReset, HIGH);
@@ -862,44 +790,27 @@ int takePic(int ImageSize) {
 
 void buildImageBuffer(String Filename) { //Rename to masterstatusholderimagebuffer in future...
   if (!SD.exists(Filename)) { //File does not exist
+    Serial.println("Image Does Not Exist");
+    StatusHolder.ImageRequested = false;
     return;
   }
 
   File IMGFile = SD.open(Filename, FILE_READ);
-  uint8_t jpglen = IMGFile.size();
-  //int segments = ((8*jpglen) / 320) + 1;
-  //String imageBuffer[segments];
+  StatusHolder.imageR.photosize = IMGFile.size();
   int index = 0;
   int i = 0;
   Serial.println("Starting Segmentation");
 
   while (IMGFile.available()) {
-    //Serial.println("Available: " + String(IMGFile.available()));
-    int bytesToRead = min(320, IMGFile.available());
-    uint8_t segment[bytesToRead - 1];
-    for (int z = 0; z < bytesToRead; z++) {
-      segment[z] = 0;
-    }
-    while (i < bytesToRead) {
-      segment[i] = (uint8_t)IMGFile.read();
-      i++;
-    }
-    //Serial.print("Current Segment " + String(index) + ": ");
-    printArray(segment, i);
-    //Serial.println("");
-    //Serial.println("Here1");
-    //    imageBuffer[index] = segment;
-    StatusHolder.imageR.store(segment, i, index);
-    StatusHolder.imageR.sizeArray[index] = bytesToRead;
-
-    i = 0;
-    index = index + 1;
-    //Serial.println("Here2");
+    //Use Single Array
+    StatusHolder.imageR.a[i] = (uint8_t)IMGFile.read();
+    i++;
   }
 
   IMGFile.close();
   Serial.println("\nDone");
-  StatusHolder.imageR.finalIndex = index - 1;
+  StatusHolder.imageR.Filename = Filename;
+  StatusHolder.imageR.currentIndex = 0;
   return;
 }
 
@@ -910,7 +821,7 @@ long lastADCSTime = 0;
 
 void setup() {
   Serial.begin(9600);
-  delay(1000);
+  delay(100);
 
   initalizePinOut();
   slaveStatus StatusHolder = slaveStatus();
@@ -1043,6 +954,7 @@ void loop() {
       ledState = LOW;
     }
     digitalWrite(13, ledState);
+    //StatusHolder.imageR.printRI();
     Serial.print("S Running: ");
     Serial.println(millis() - ledLastTime);
     ledLastTime = millis();
