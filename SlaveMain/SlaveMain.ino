@@ -6,7 +6,6 @@
 
 ////Constant Initialization
 bool TestReset = false;
-
 int MasterFaultTime = 5 * 60 * 1000;
 int lastMasterCom = 0;
 int resets = 0;
@@ -151,7 +150,7 @@ class RAMImageSlave {
   public:
     uint8_t a[DLSize * 16];
 
-    int photosize;
+    long photosize;
     String Filename;
     volatile int currentIndex;
 
@@ -205,7 +204,7 @@ class slaveStatus
     unsigned long burstStart;
     unsigned long burstDuration;
     RAMImageSlave imageR;
-    volatile bool ImageRequested;
+    volatile int ITStatus;
 
     //Iridium Network Status Attributes
 
@@ -219,7 +218,7 @@ class slaveStatus
                 int IS = smallImage, long BD = 120000) {
 
       imageR = RAMImageSlave();
-      ImageRequested = false;
+      ITStatus = 0;
 
       ADCS_Active = false;
       Temp = t;
@@ -608,23 +607,26 @@ void PopCommands() {
           StatusHolder.burstDuration = currentCommand[1] * 1000;
           break;
         case (103): //Request Photo #<currentCommand[1]>
-          char filename[8];
-          strcpy(filename, "0000.jpg");
-          filename[0] = '0' + currentCommand[1] / 1000;
-          filename[1] = '0' + currentCommand[1] % 1000 / 100;
-          filename[2] = '0' + currentCommand[1] % 1000 % 100 / 10;
-          filename[3] = '0' + currentCommand[1] % 1000 % 100 % 10;
+          char filename[9];
+          strcpy(filename, "A0000.jpg");
+          filename[1] = '0' + currentCommand[1] / 1000;
+          filename[2] = '0' + currentCommand[1] % 1000 / 100;
+          filename[3] = '0' + currentCommand[1] % 1000 % 100 / 10;
+          filename[4] = '0' + currentCommand[1] % 1000 % 100 % 10;
           //StatusHolder.imageR = RAMImageSlave();
           //buildImageBuffer(filename);
           Wire.end();
-          Wire.begin(8);
+          Wire.begin(11);
           buildImageBuffer("IMAGE037.jpg");
           Serial.println("Image");
           StatusHolder.imageR.printRI();
-          StatusHolder.ImageRequested = true;
+          StatusHolder.ITStatus = 1; //Stage Image
           break;
         case (104): //Image Successfully Recieved
-          StatusHolder.ImageRequested = false;
+          StatusHolder.ITStatus = 0; //Transmit Successa
+          break;
+        case (105): //Image Retrival
+          StatusHolder.ITStatus = 2; //Send Image
           break;
       }
     } else {
@@ -667,48 +669,72 @@ volatile int totalBytesSent = 0;
 void requestEvent() {
   //Serial.println("Data Request");
   digitalWrite(8, HIGH);
-    if (StatusHolder.ImageRequested) { //Image Request
-            Serial.println("Image Data Request");
-            int bytesSent = 0;
-            for (int i = 0; i < 16; i++) {
-              bytesSent += Wire.write(StatusHolder.imageR.a[StatusHolder.imageR.currentIndex]);
-              Serial.println(StatusHolder.imageR.a[StatusHolder.imageR.currentIndex]);
-              StatusHolder.imageR.currentIndex++;
-              if (StatusHolder.imageR.currentIndex >= StatusHolder.imageR.photosize) {
-                break;
-              }
-            }
-            Serial.println("bytesSent: " + String(bytesSent));
-            totalBytesSent += bytesSent;
-            if (StatusHolder.imageR.currentIndex >= StatusHolder.imageR.photosize) {
-              Serial.println("Finished Data, Sent: "+String(totalBytesSent));
-              StatusHolder.ImageRequested = false;
-              StatusHolder.imageR.currentIndex = 0;
-              totalBytesSent = 0;
-              test = false;
-              return;
-            }
-      
-//      Serial.println("Image Data Request");
-//      for (int i = 0; i < StatusHolder.imageR.photosize; i++) {
-//        totalBytesSent += Wire.write(StatusHolder.imageR.a[i]);
-//        Serial.println(StatusHolder.imageR.a[i]);
-//        Serial.println(StatusHolder.imageR.photosize-i);
-//      }
-//      Serial.println("Finished Data, Sent: " + String(totalBytesSent));
-//      StatusHolder.ImageRequested = false;
-//      StatusHolder.imageR.currentIndex = 0;
-//      totalBytesSent = 0;
-//      test = false;
-//      return;
+  switch (StatusHolder.ITStatus) { //Image Request
+    case (1): {
+        Serial.println("Image Size Request");
+        String s = String(StatusHolder.imageR.photosize);
+        for (int i = 0; i < s.length(); i++) {
+          Wire.write(s.charAt(i));
+        }
+        break;
+      }
+    case (2): {
+        Serial.println("Image Data Request");
+        int bytesSent = 0;
+        uint8_t buf1[16];
+        int i;
+        for (i = 0; i < 16; i++) {
+          bytesSent += Wire.write(StatusHolder.imageR.a[StatusHolder.imageR.currentIndex]);
+          //      buf1[i] = StatusHolder.imageR.a[StatusHolder.imageR.currentIndex];
+          Serial.println(StatusHolder.imageR.a[StatusHolder.imageR.currentIndex]);
+          StatusHolder.imageR.currentIndex++;
+          if (StatusHolder.imageR.currentIndex >= StatusHolder.imageR.photosize) {
+            break;
+          }
+        }
+        //    uint8_t buf2[i+1];
+        //    for (int j = 0; j <= i; j++) {
+        //      buf2[j] = buf1[j];
+        //    }
+        //    bytesSent = Wire.write(buf2, i);
+        Serial.println("bytesSent: " + String(bytesSent));
+        totalBytesSent += bytesSent;
+        if (StatusHolder.imageR.currentIndex >= StatusHolder.imageR.photosize) {
+          Wire.flush();
+          //      Wire.end();
+          //      Wire.begin(11);
+          Serial.println("Finished Data, Sent: " + String(totalBytesSent));
+          StatusHolder.ITStatus = 0;
+          StatusHolder.imageR.currentIndex = 0;
+          totalBytesSent = 0;
+          test = false;
+          return;
+        }
 
-    } else {//General Communication
-      //StatusHolder.WriteStatus(); //Check Format
-    }
+        //      Serial.println("Image Data Request");
+        //      for (int i = 0; i < StatusHolder.imageR.photosize; i++) {
+        //        totalBytesSent += Wire.write(StatusHolder.imageR.a[i]);
+        //        Serial.println(StatusHolder.imageR.a[i]);
+        //        Serial.println(StatusHolder.imageR.photosize-i);
+        //      }
+        //      Serial.println("Finished Data, Sent: " + String(totalBytesSent));
+        //      StatusHolder.ImageRequested = false;
+        //      StatusHolder.imageR.currentIndex = 0;
+        //      totalBytesSent = 0;
+        //      test = false;
+        //      return;
 
-    lastMasterCom = millis();
-    digitalWrite(8, LOW);
-  
+        break;
+      }
+    case (0): { //General Communication
+        //StatusHolder.WriteStatus(); //Check Format
+        break;
+      }
+  }
+
+  lastMasterCom = millis();
+  digitalWrite(8, LOW);
+
 }
 void initalizePinOut() {
   const int MasterReset = A4; pinMode(MasterReset, OUTPUT); //Reset Master Core
@@ -737,27 +763,32 @@ void initalizePinOut() {
 }
 
 
-int takePic(int ImageSize) {
+String takePic(int ImageSize) {
   // Try to locate the camera
-  cam.begin(); //Need to ensure it worked
+  while (!cam.begin()) {
+    Serial.println("Camera Fail");
+  }
+  //cam.begin(); //Need to ensure it worked
   cam.setImageSize(ImageSize);//cam.setImageSize(VC0706_160x120);
 
   if (!cam.takePicture()) {
-    return 0;
+    return "";
   } else {
     StatusHolder.numPhotos++;
     //Serial.println("Picture taken!");
   }
 
   // Create an image with the name IMAGExx.JPG //ALTER THIS TO STORE THE NEXT AVAILABLE FILENAME
-  char filename[8];
-  strcpy(filename, "0000.JPG");
+  char filename[9];
+  strcpy(filename, "A0000.JPG");
   for (int i = 0; i < 9999; i++) {
-    filename[0] = '0' + StatusHolder.numPhotos / 1000;
-    filename[1] = '0' + StatusHolder.numPhotos % 1000 / 100;
-    filename[2] = '0' + StatusHolder.numPhotos % 1000 % 100 / 10;
-    filename[3] = '0' + StatusHolder.numPhotos % 1000 % 100 % 10;
+    filename[1] = '0' + StatusHolder.numPhotos / 1000;
+    filename[2] = '0' + StatusHolder.numPhotos % 1000 / 100;
+    filename[3] = '0' + StatusHolder.numPhotos % 1000 % 100 / 10;
+    filename[4] = '0' + StatusHolder.numPhotos % 1000 % 100 % 10;
     if (!SD.exists(filename)) {
+      Serial.print("File created: ");
+      Serial.println(filename);
       break;
     } else {
       StatusHolder.numPhotos++; //If loss of power resets it but photos were taken prior
@@ -785,13 +816,40 @@ int takePic(int ImageSize) {
   }
   imgFile.close();
   //time = millis() - time;
-  return bytesWritten;
+  return filename;
+}
+
+void printDirectory(File dir, int numTabs) {
+  while (true) {
+
+    File entry =  dir.openNextFile();
+    if (! entry) {
+      // no more files
+      break;
+    }
+    for (uint8_t i = 0; i < numTabs; i++) {
+      Serial.print('\t');
+    }
+    Serial.print(entry.name());
+    if (entry.isDirectory()) {
+      Serial.println("/");
+      printDirectory(entry, numTabs + 1);
+    } else {
+      // files have sizes, directories do not
+      Serial.print("\t\t");
+      Serial.println(entry.size(), DEC);
+    }
+    entry.close();
+  }
 }
 
 void buildImageBuffer(String Filename) { //Rename to masterstatusholderimagebuffer in future...
   if (!SD.exists(Filename)) { //File does not exist
     Serial.println("Image Does Not Exist");
-    StatusHolder.ImageRequested = false;
+    StatusHolder.ITStatus = 0;
+    StatusHolder.imageR.Filename = "Image Didn't Exist";
+    StatusHolder.imageR.photosize = 0;
+    StatusHolder.imageR.currentIndex = 0;
     return;
   }
 
@@ -818,7 +876,7 @@ void buildImageBuffer(String Filename) { //Rename to masterstatusholderimagebuff
 int ledState = HIGH;
 long ledLastTime = 0;
 long lastADCSTime = 0;
-
+File root;
 void setup() {
   Serial.begin(9600);
   delay(100);
@@ -829,7 +887,7 @@ void setup() {
   StatusHolder.ADCS_Active = true;
 
   //digitalWrite(MasterReset, HIGH); //Enable Master
-  Wire.begin(8);
+  Wire.begin(11);
   Wire.onReceive(commandParser);
   Wire.onRequest(requestEvent);
 
@@ -846,18 +904,24 @@ void setup() {
   //  attachInterrupt(digitalPinToInterrupt(12), forcedStall, LOW);
 
   //Camera Setup
-  SD.begin(chipSelect);
-  //  if (!SD.begin(chipSelect)) {
-  //    Serial.println("Card failed, or not present");
-  //    // don't do anything more:
-  //    return;
-  //  }
+  //SD.begin(chipSelect);
+  while (!SD.begin(chipSelect)) {
+    Serial.println("Card failed, or not present");
+    delay(100);
+  }
+  delay(500);
+  Serial.println("SD Card Active");
+  root = SD.open("/");
+  printDirectory(root, 0);
 
   //Image Transfer Test
   //  buildImageBuffer("0000.JPG");
   //  Serial.println("\n\nPrint Start");
   //  StatusHolder.imageR.printRI();
   //  Serial.println("\nPrint End");
+  Serial.println("");
+  //Serial.println(takePic(StatusHolder.imageSize));
+  Serial.println("");
 }
 
 bool SoftwarePWM = false;
@@ -956,7 +1020,8 @@ void loop() {
     digitalWrite(13, ledState);
     //StatusHolder.imageR.printRI();
     Serial.print("S Running: ");
-    Serial.println(millis() - ledLastTime);
+    Serial.print(millis() - ledLastTime);
+    Serial.println(": " + String(millis() / 1000));
     ledLastTime = millis();
   }
 

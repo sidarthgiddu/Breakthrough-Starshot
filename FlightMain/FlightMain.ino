@@ -162,9 +162,9 @@ void printArray(uint8_t * arr, int s) {
       //      if (arr[i] < pow(2, j))
       //        Serial.print(B0);
       //    }
-//      if (i % DLSize == 0) {
-//        Serial.println(" ");
-//      }
+      //      if (i % DLSize == 0) {
+      //        Serial.println(" ");
+      //      }
       print_binary(arr[i], 8);
       Serial.print(" ");
     }
@@ -252,77 +252,77 @@ class RAMImage {
         }
       }
       if (dataSize >= DLSize * 1) {
-        for (int i = 0; i < min(dataSize-DLSize, DLSize); i++) {
+        for (int i = 0; i < min(dataSize - DLSize, DLSize); i++) {
           a1[i] = data[(DLSize * 1) + i];
         }
       }
       if (dataSize >= DLSize * 2) {
-        for (int i = 0; i < min(dataSize-DLSize*2, DLSize); i++) {
+        for (int i = 0; i < min(dataSize - DLSize * 2, DLSize); i++) {
           a2[i] = data[(DLSize * 2) + i];
         }
       }
       if (dataSize >= DLSize * 3) {
-        for (int i = 0; i < min(dataSize-DLSize*3, DLSize); i++) {
+        for (int i = 0; i < min(dataSize - DLSize * 3, DLSize); i++) {
           a3[i] = data[(DLSize * 3) + i];
         }
       }
       if (dataSize >= DLSize * 4) {
-        for (int i = 0; i < min(dataSize-DLSize*4, DLSize); i++) {
+        for (int i = 0; i < min(dataSize - DLSize * 4, DLSize); i++) {
           a4[i] = data[(DLSize * 4) + i];
         }
       }
       if (dataSize >= DLSize * 5) {
-        for (int i = 0; i < min(dataSize-DLSize*5, DLSize); i++) {
+        for (int i = 0; i < min(dataSize - DLSize * 5, DLSize); i++) {
           a5[i] = data[(DLSize * 5) + i];
         }
       }
       if (dataSize >= DLSize * 6) {
-        for (int i = 0; i < min(dataSize-DLSize*6, DLSize); i++) {
+        for (int i = 0; i < min(dataSize - DLSize * 6, DLSize); i++) {
           a6[i] = data[(DLSize * 6) + i];
         }
       }
       if (dataSize >= DLSize * 7) {
-        for (int i = 0; i < min(dataSize-DLSize*7, DLSize); i++) {
+        for (int i = 0; i < min(dataSize - DLSize * 7, DLSize); i++) {
           a7[i] = data[(DLSize * 7) + i];
         }
       }
       if (dataSize >= DLSize * 8) {
-        for (int i = 0; i < min(dataSize-DLSize*8, DLSize); i++) {
+        for (int i = 0; i < min(dataSize - DLSize * 8, DLSize); i++) {
           a8[i] = data[(DLSize * 4) + i];
         }
       }
       if (dataSize >= DLSize * 9) {
-        for (int i = 0; i < min(dataSize-DLSize*9, DLSize); i++) {
+        for (int i = 0; i < min(dataSize - DLSize * 9, DLSize); i++) {
           a9[i] = data[(DLSize * 9) + i];
         }
       }
       if (dataSize >= DLSize * 10) {
-        for (int i = 0; i < min(dataSize-DLSize*10, DLSize); i++) {
+        for (int i = 0; i < min(dataSize - DLSize * 10, DLSize); i++) {
           a10[i] = data[(DLSize * 10) + i];
         }
       }
       if (dataSize >= DLSize * 11) {
-        for (int i = 0; i < min(dataSize-DLSize*11, DLSize); i++) {
+        for (int i = 0; i < min(dataSize - DLSize * 11, DLSize); i++) {
           a11[i] = data[(DLSize * 11) + i];
         }
       }
       if (dataSize >= DLSize * 12) {
-        for (int i = 0; i < min(dataSize-DLSize*12, DLSize); i++) {
+        for (int i = 0; i < min(dataSize - DLSize * 12, DLSize); i++) {
           a12[i] = data[(DLSize * 12) + i];
         }
       }
       if (dataSize >= DLSize * 13) {
-        for (int i = 0; i < min(dataSize-DLSize*13, DLSize); i++) {
+        for (int i = 0; i < min(dataSize - DLSize * 13, DLSize); i++) {
           a13[i] = data[(DLSize * 13) + i];
         }
       }
       if (dataSize >= DLSize * 14) {
-        for (int i = 0; i < min(dataSize-DLSize*14, DLSize); i++) {
+        for (int i = 0; i < min(dataSize - DLSize * 14, DLSize); i++) {
           a14[i] = data[(DLSize * 14) + i];
         }
       }
       if (dataSize >= DLSize * 15) {
-        for (int i = 0; i < min(dataSize-DLSize*15, DLSize); i++) {
+        for (int i = 0; i < min(dataSize - DLSize * 15, DLSize); i++) {
           a15[i] = data[(DLSize * 15) + i];
         }
       }
@@ -495,7 +495,7 @@ class masterStatus {
 
     RAMImage imageR;
     int currentSegment;
-    bool RequestingImage;
+    int RequestingImageStatus;
 
     bool hardwareAvTable[10];//Hardware Avaliability Table
     //[Imu, SX+,SX-,SY+, SY-, SZ+, SZ-,Temp,DoorSense,LightSense]
@@ -602,7 +602,7 @@ class masterStatus {
 
       imageR = RAMImage();
       currentSegment = 0;
-      RequestingImage = false;
+      RequestingImageStatus = 0;
 
       AttemptingLink = false;
       MOStatus = 0;
@@ -981,15 +981,15 @@ void popCommands() {
           masterStatusHolder.SBDRT = (currentCommand[1]);
           break;
         case (81):
-          masterStatusHolder.RequestingImage = true;
+          masterStatusHolder.RequestingImageStatus = 1;
           String com = "103," + String(currentCommand[1]) + "!";
           sendSCommand(com);
-          char filename[8];
-          strcpy(filename, "0000.JPG");
-          filename[0] = '0' + currentCommand[1] / 1000;
-          filename[1] = '0' + currentCommand[1] % 1000 / 100;
-          filename[2] = '0' + currentCommand[1] % 1000 % 100 / 10;
-          filename[3] = '0' + currentCommand[1] % 1000 % 100 % 10;
+          char filename[9];
+          strcpy(filename, "A0000.JPG");
+          filename[1] = '0' + currentCommand[1] / 1000;
+          filename[2] = '0' + currentCommand[1] % 1000 / 100;
+          filename[3] = '0' + currentCommand[1] % 1000 % 100 / 10;
+          filename[4] = '0' + currentCommand[1] % 1000 % 100 % 10;
           masterStatusHolder.imageR.Filename = filename;
           break;
       }
@@ -1048,7 +1048,7 @@ void sendSCommand(String data) {
   char com[data.length() + 1];
   data.toCharArray(com, data.length() + 1);
   if (WireConnected) {
-    Wire.beginTransmission(8); // transmit to device #8
+    Wire.beginTransmission(11); // transmit to device #8
     Wire.write(com);   // sends String
     Wire.endTransmission();    // stop transmitting
   }
@@ -1057,61 +1057,84 @@ void sendSCommand(String data) {
 uint8_t segment[4000];
 int dataIndex = 0;
 bool lastRead = false;
+int readSize = 0;
 bool requestFromSlave() {
   Serial.println("Requesting");
   String res = "";
   bool success = false;
   if (WireConnected) {
-    if (masterStatusHolder.RequestingImage) {
-      Wire.requestFrom(8, 16); // request 64 bytes from slave device #8
-      //delay(1);
-      //int i = 0;
-      while (Wire.available()) {
-        //Serial.println("AV: "+String(Wire.available()));
-        segment[dataIndex] = (uint8_t)Wire.read();
-        Serial.println(segment[dataIndex]);
-        dataIndex++;
-        //i++;
-      }
-      //printArray(segment, dataIndex);
-      Serial.println(dataIndex);
-      //Serial.println("i: "+String(i));
-      if (dataIndex >= 3612 - 1) {
-        Serial.println("Last");
-        lastRead = true;
-        //printArray(segment, dataIndex);
-        masterStatusHolder.RequestingImage = false;
-        masterStatusHolder.imageR.store(segment, dataIndex);
+    switch (masterStatusHolder.RequestingImageStatus) {
+      case (1): { //Get Image Size
+          Wire.requestFrom(11, 8, true);
+          delay(5);
+          String res = "";
+          while (Wire.available()) {
+            res += (char)Wire.read();
+          }
+          readSize = res.toInt();
+          Serial.println("Incoming Photo Size: " + String(readSize));
+          masterStatusHolder.RequestingImageStatus = 2;
+          sendSCommand("105,1!");
+          break;
+        }
+      case (2): { //Get Image Data
+          Serial.println(Wire.requestFrom(11, 16, true)); // request 64 bytes from slave device #8
+          delay(5);
+          int i = 0;
+          Serial.println("AV: " + String(Wire.available()));
+          while (Wire.available()) {
+            segment[dataIndex] = (uint8_t)Wire.read();
+            Serial.println(segment[dataIndex]);
+            if (dataIndex >= readSize){
+              break;
+            }
+            dataIndex++;
+            i++;
+          }
+          //printArray(segment, dataIndex);
+          Serial.println(dataIndex);
+          //Serial.println("i: "+String(i));
+          if (dataIndex >= readSize-1 && dataIndex > 16) { //if (i < 16) {
+            Serial.println("Last");
+            //dataIndex = 0;
+            lastRead = true;
+            //printArray(segment, dataIndex);
+            masterStatusHolder.RequestingImageStatus = 0;
+            masterStatusHolder.imageR.store(segment, dataIndex);
 
-        //Will reset Slave from ImageTransmit Mode
-      } else {
-        Serial.println("Not Last");
-      }
+            //Will reset Slave from ImageTransmit Mode
 
-    } else {
-      Wire.requestFrom(8, 10, true); // request 10 bytes from slave device #8
-      //delay(50);
-      int endTime = millis() + manualTimeout;
-      //Serial.println("Here");
+          } else {
+            Serial.println("Not Last");
+          }
+          break;
+        }
+      case (0): {
+          Wire.requestFrom(11, 10, true); // request 10 bytes from slave device #8
+          //delay(50);
+          int endTime = millis() + manualTimeout;
+          //Serial.println("Here");
 
-      //Read and Reformat
-      //  ADCS_Active;
-      if (Wire.available()) {
-        success = true;
-      }
-      masterStatusHolder.MResets = (int)((uint8_t)Wire.read());
-      masterStatusHolder.AnalogTemp = (int)((uint8_t)Wire.read());
-      masterStatusHolder.LightSense = (int)((uint8_t)Wire.read());
-      masterStatusHolder.CurXDir  = (int)((uint8_t)Wire.read());
-      masterStatusHolder.CurYDir = (int)((uint8_t)Wire.read());
-      masterStatusHolder.CurZDir = (int)((uint8_t)Wire.read());
-      masterStatusHolder.CurXPWM = (int)((uint8_t)Wire.read());
-      masterStatusHolder.CurYPWM = (int)((uint8_t)Wire.read());
-      masterStatusHolder.CurZPWM = (int)((uint8_t)Wire.read());
-      masterStatusHolder.numPhotos = (int)((uint8_t)Wire.read());
+          //Read and Reformat
+          //  ADCS_Active;
+          if (Wire.available()) {
+            success = true;
+          }
+          masterStatusHolder.MResets = (int)((uint8_t)Wire.read());
+          masterStatusHolder.AnalogTemp = (int)((uint8_t)Wire.read());
+          masterStatusHolder.LightSense = (int)((uint8_t)Wire.read());
+          masterStatusHolder.CurXDir  = (int)((uint8_t)Wire.read());
+          masterStatusHolder.CurYDir = (int)((uint8_t)Wire.read());
+          masterStatusHolder.CurZDir = (int)((uint8_t)Wire.read());
+          masterStatusHolder.CurXPWM = (int)((uint8_t)Wire.read());
+          masterStatusHolder.CurYPWM = (int)((uint8_t)Wire.read());
+          masterStatusHolder.CurZPWM = (int)((uint8_t)Wire.read());
+          masterStatusHolder.numPhotos = (int)((uint8_t)Wire.read());
+          break;
+        }
     }
+    return success;
   }
-  return success;
 }
 
 String buildIMUDataCommand() {
@@ -1515,7 +1538,7 @@ void Stall() {
     delay(140);
     digitalWrite(8, LOW);
     delay(140);
-    //Serial.println(("Stall: ") + String(i));
+    Serial.print(".");
     i++;
   }
 }
@@ -1567,39 +1590,74 @@ void setup()
 
   //masterStatusHolder.configureSensor(); //runs configureSensor function
   digitalWrite(8, LOW);
-  sendSCommand("103,31!");
-  masterStatusHolder.RequestingImage = true;
+  masterStatusHolder.RequestingImageStatus = 1;
   masterStatusHolder.State = IMAGE_REQUEST;
-   masterStatusHolder.NextState = IMAGE_REQUEST;
+  masterStatusHolder.NextState = IMAGE_REQUEST;
 }
 
-bool downlinkStaged = false;
+bool downlinkJustStaged = false;
 bool ImageDownlink_Active = true;
 const int DOWNLINK_TESTING = 999;
 //const int IMAGE_REQUEST = 888;
+int Requests = 0;
 void loop() {
   //masterStatusHolder.State = IMAGE_REQUEST;
   switch (masterStatusHolder.State) {
-    case (IMAGE_REQUEST):
-      Serial.println("Here");
-      //Serial.println(masterStatusHolder.RequestingImage);
-      //delay(100);
-      if (masterStatusHolder.RequestingImage) {
-        Serial.println("Image Data Requested");
-        requestFromSlave();
-        //delay(5);
-        if (lastRead) {
-          lastRead = false;
-          masterStatusHolder.NextState = NORMAL_OPS;//DOWNLINK_TESTING ?
-          sendSCommand("104,1!");
-          Serial.println("");
-          Stall();
-          masterStatusHolder.imageR.printRI();
-          Stall();
-          Serial.println("");
-        }
-      }
+    case (777): //Stall State
+      Serial.println("Idling in Stall State");
+      Stall();
+      masterStatusHolder.NextState = IMAGE_REQUEST;
+      masterStatusHolder.RequestingImageStatus = 1;
       break;
+    case (IMAGE_REQUEST): {
+        Serial.println("Here");
+        //Serial.println(masterStatusHolder.RequestingImage);
+        //delay(100);
+        switch (masterStatusHolder.RequestingImageStatus) {
+          case (2): {
+              Serial.println("Image Data Requested");
+              requestFromSlave();
+              Requests++;
+              if (Requests > 500) {
+                Serial.println("Image Transfer Fail");
+                Requests = 0;
+                lastRead = false;
+                masterStatusHolder.RequestingImageStatus = 0;
+                masterStatusHolder.NextState = 777;//DOWNLINK_TESTING ?
+                sendSCommand("104,1!");
+              }
+              //delay(5);
+              if (lastRead) {
+                //          Wire.flush();
+                //          Wire.end();
+                //          Wire.begin();
+                masterStatusHolder.RequestingImageStatus = 0;
+                Requests = 0;
+                lastRead = false;
+                masterStatusHolder.NextState = 777;//DOWNLINK_TESTING ?
+                sendSCommand("104,1!");
+                Serial.println("");
+                masterStatusHolder.imageR.printRI();
+                Stall();
+                Serial.println("");
+                break;
+              }
+              break;
+            }
+          case (1): {
+              sendSCommand("103,1111!");
+              delay(10);
+              requestFromSlave();
+              break;
+            }
+          case (0): {
+              //Shouldn't be here
+              masterStatusHolder.NextState = 777;
+              break;
+            }
+        }
+        break;
+      }
 
     case (DOWNLINK_TESTING):
       if (ImageDownlink_Active) {
@@ -1611,18 +1669,20 @@ void loop() {
               if (error == 0) {
                 //Success
                 masterStatusHolder.MOStatus = 13;
-                downlinkStaged = true;
+                downlinkJustStaged = true;
                 Serial.println("Segment " + String(masterStatusHolder.currentSegment) + " Staged");
               } else {
                 //Fail
                 Serial.println("Error: " + String(error));
               }
+            } else {
+              Serial.println("Still Attempting Link");
             }
           } else {
-            if (downlinkStaged) {
+            if (downlinkJustStaged) {
               //SBDIX Call after SBDWB
               sendSBDIX();
-              downlinkStaged = false;
+              downlinkJustStaged = false;
             }
             RBDATA(); //Can Reset MOStatus
           }
@@ -1687,6 +1747,7 @@ void loop() {
 
       //ADCS
       if (millis() - LastSpinCheckT > SpinCheckTime) {
+        LastSpinCheckT = millis();
         if (masterStatusHolder.Gyro[0] > OmegaThreshold || masterStatusHolder.Gyro[1] > OmegaThreshold) {
           sendSCommand("91,1!"); //Activate Torquers
           masterStatusHolder.ADCS_Active = true;
@@ -1865,7 +1926,7 @@ void loop() {
   cycle++;
   //Serial.print("C : ");
   //Serial.println(cycle);
-  
+
   //ROCKBLOCK
   if (millis() - lastRBcheck >= ((long)300000)) {
     RBDATA();
