@@ -16,10 +16,11 @@
 #define DEPLOY_DOWN_LK 8
 #define LOW_POWER      9
 #define SAFE_MODE     10
+const int IMAGE_REQUEST = 888;
 
-bool ImuWireConnected = false;
+bool ImuWireConnected = true;
 bool WireConnected = true;
-
+bool LED_NOT_DOOR = false;
 
 ////Constant Initialization
 unsigned long cruiseEnd = 30 * 60 * 1000;
@@ -51,13 +52,13 @@ int HT_Threshold = 60; //C
 
 //RockBlock Test
 unsigned long lastRBCheck = 0;
-long RBCheckTime = 5 * 60 * 1000;
+long RBCheckTime = 6000;
 
 //IMU and Sensor Test
 bool SensorFetch = false;
 bool imuWorking = true;
 bool masterUseIMU = true;
-///Adafruit_LSM9DS0 imu = Adafruit_LSM9DS0();
+Adafruit_LSM9DS0 imu = Adafruit_LSM9DS0();
 int imuSensorDwell = 100; //Averaging Time Non-BLOCKING!
 unsigned long lastIMUTime = 0;
 int IMUrecords = 0;
@@ -94,7 +95,7 @@ bool commandedDL = false;
 
 //Pinout Numbers
 //TO DO
-const int DoorSens = 13;
+const int DoorSensePin = 13;
 const int DoorTrig = 5;
 const int BatteryPin = A0;
 const int RBRx = 0; //RockBlock Serial Into FCom
@@ -115,7 +116,7 @@ const int SlaveReset = 10; //Slave Fault Handing (via Hard Reset)
 const int DoorMagEnable = 11; //Allow Door Magnetorquer to work
 
 //Downlink Test Placeholders
-long DLTime = 6005;
+long DLTime = 6137;
 long lastDLTime = 0;
 float placeHolderBattery = 0.3;
 float placeHolderSolarXPlus = .1;
@@ -154,6 +155,12 @@ class floatTuple
       Serial.print(z); Serial.println(F(" "));
     }
 };
+
+float fmap(float x, float in_min, float in_max, float out_min, float out_max)
+{
+  return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
+}
+
 
 void printArray(uint8_t * arr, int s) {
   if (s) {
@@ -195,6 +202,14 @@ class RAMImage {
     int finalIndex = 0;
     String Filename;
 
+    int photoSize() {
+      int sum = 0;
+      for (int i = 0; i < 16; i++) {
+        sum += sizeArray[i];
+      }
+      return sum;
+    }
+
     void printRI() {
       delay(100);
       Serial.println("\nRAM Loaded Image: " + Filename);
@@ -224,6 +239,26 @@ class RAMImage {
     }
 
     RAMImage() {
+      sizeArray[16] = {0};
+      finalIndex = 0;
+      Filename = "";
+
+      a0[DLSize] = {0};
+      a1[DLSize] = {0};
+      a2[DLSize] = {0};
+      a3[DLSize] = {0};
+      a4[DLSize] = {0};
+      a5[DLSize] = {0};
+      a6[DLSize] = {0};
+      a7[DLSize] = {0};
+      a8[DLSize] = {0};
+      a9[DLSize] = {0};
+      a10[DLSize] = {0};
+      a11[DLSize] = {0};
+      a12[DLSize] = {0};
+      a13[DLSize] = {0};
+      a14[DLSize] = {0};
+      a15[DLSize] = {0};
       //Blank
     }
 
@@ -236,7 +271,7 @@ class RAMImage {
         if (dsize - DLSize > 0) {
           sizeArray[index] = DLSize;
           dsize -= DLSize;
-          Serial.println(sizeArray[index]);
+          //Serial.println(sizeArray[index]);
         } else {
           sizeArray[index] = dsize;
           finalIndex = index;
@@ -288,7 +323,7 @@ class RAMImage {
       }
       if (dataSize >= DLSize * 8) {
         for (int i = 0; i < min(dataSize - DLSize * 8, DLSize); i++) {
-          a8[i] = data[(DLSize * 4) + i];
+          a8[i] = data[(DLSize * 8) + i];
         }
       }
       if (dataSize >= DLSize * 9) {
@@ -436,7 +471,6 @@ class RAMImage {
 //IMU Code
 
 floatTuple getMagData(Adafruit_LSM9DS0 imu) {
-  imu.read();
   floatTuple mData = floatTuple((int)imu.magData.x * (2.0 / 32768),
                                 (int)imu.magData.y * (2.0 / 32768),
                                 (int)imu.magData.z * (2.0 / 32768));
@@ -444,8 +478,6 @@ floatTuple getMagData(Adafruit_LSM9DS0 imu) {
 }
 
 floatTuple getGyroData(Adafruit_LSM9DS0 imu) {
-  imu.read();
-  //32768
   floatTuple gData = floatTuple((int)imu.gyroData.x * (245.0 / 32768),
                                 (int)imu.gyroData.y * (245.0 / 32768),
                                 (int)imu.gyroData.z * (245.0 / 32768));
@@ -453,8 +485,7 @@ floatTuple getGyroData(Adafruit_LSM9DS0 imu) {
 }
 
 int getImuTempData(Adafruit_LSM9DS0 imu) {
-  imu.read();
-  return (int)imu.temperature * (1.0 / 8.0); // 8 per Degree C
+  return (int)imu.temperature ;// * (1.0 / 8.0); // 8 per Degree C
 }
 
 
@@ -491,7 +522,7 @@ commandBuffer cBuf;
 
 class masterStatus {
   public:
-    Adafruit_LSM9DS0 imu;
+    //Adafruit_LSM9DS0 imu;
 
     RAMImage imageR;
     int currentSegment;
@@ -499,6 +530,7 @@ class masterStatus {
 
     bool hardwareAvTable[10];//Hardware Avaliability Table
     //[Imu, SX+,SX-,SY+, SY-, SZ+, SZ-,Temp,DoorSense,LightSense]
+    //Fix PopCommand Av Swap Limit if changed
 
     int State;
     int NextState;
@@ -508,8 +540,10 @@ class masterStatus {
     float MagAcc[3];
     float GyroAcc[3];
     float AccelAcc[3];
+    int TempAcc;
     int ImuTemp;
     float Battery;
+    float BatteryAcc;
     float SolarXPlus;
     float SolarXMinus;
     float SolarYPlus;
@@ -553,6 +587,7 @@ class masterStatus {
     int MTQueued;
     String SBDRT;
     int LastMsgType;
+    int LastSMsgType
     //LastMsgType values:
     //0 = inval
     //1 = ok
@@ -571,7 +606,7 @@ class masterStatus {
       State = S;
       NextState = State;
       PayloadDeployed = pd;
-      imu = Adafruit_LSM9DS0(); //imu.begin();
+      //imu = Adafruit_LSM9DS0(); //imu.begin();
 
       bool hardwareAvTable[10] = {true}; // Hardware Avaliability Table
       //[Imu, SX+,SX-,SY+, SY-, SZ+, SZ-,Temp,DoorSense,LightSense]
@@ -580,9 +615,10 @@ class masterStatus {
       Mag[0] = M.x; Mag[1] = M.y; Mag[2] = M.z;
       GyroAcc[3] = {0};
       MagAcc[3] = {0};
-
+      TempAcc = 0;
       ImuTemp = IT;
       Battery = B;
+      BatteryAcc = 0;
       SolarXPlus = SolarXP;
       SolarXMinus = SolarXM;
       SolarYPlus = SolarYP;
@@ -612,6 +648,7 @@ class masterStatus {
       MTLength = 0;
       MTQueued = 0;
       LastMsgType = 0;
+      LastSMsgType = 0;
 
       ADCS_Active = ADCS;
       MResets = MR;
@@ -629,10 +666,12 @@ class masterStatus {
     }
     void updateSensors() {
       if (imuWorking) {
+        imu.read();
         floatTuple M = getMagData(imu);
         floatTuple g = getGyroData(imu);
         GyroAcc[0] += g.x; GyroAcc[1] += g.y; GyroAcc[2] += g.z;
         MagAcc[0] += M.x; MagAcc[1] += M.y; MagAcc[2] += M.z;
+        TempAcc += getImuTempData(imu);
         //AccelAcc
       }
       SolarXPlus = getCurrentAmp(1); //X+
@@ -642,26 +681,28 @@ class masterStatus {
       SolarZPlus = getCurrentAmp(5); //Z+
       SolarZMinus = getCurrentAmp(6); //Z-
 
-      Battery = analogRead(BatteryPin); //TODO x2??
-
-      //Request Light/Temp Data From Slave
-
+      //Serial.println(analogRead(BatteryPin));
+      BatteryAcc += 2 * fmap((float)analogRead(BatteryPin), 0.0, 1023.0, 0.0, 3.3); //TODO x2??
+      DoorSense = digitalRead(DoorSensePin);
     }
-    void configureSensor()
-    {
-      if (ImuWireConnected) {
-        //set magnetometer range to +-2 gauss
-        imu.setupMag(imu.LSM9DS0_MAGGAIN_2GAUSS);
-        //set gyro range to +-245 degrees per second
-        imu.setupGyro(imu.LSM9DS0_GYROSCALE_245DPS);
-        //imu.setupAccel(imu.LSM9DS0_ACCEL_MG_LSB_2G);
-      }
-    }
+
+    //    void configureSensor()
+    //    {
+    //      if (ImuWireConnected) {
+    //        //set magnetometer range to +-2 gauss
+    //        imu.setupMag(imu.LSM9DS0_MAGGAIN_2GAUSS);
+    //        //set gyro range to +-245 degrees per second
+    //        imu.setupGyro(imu.LSM9DS0_GYROSCALE_245DPS);
+    //        //imu.setupAccel(imu.LSM9DS0_ACCEL_MG_LSB_2G);
+    //      }
+    //    }
+
     String toString() {
       //Produces JSON Output in ASCII  for Downlink
       String output = "";
       output += "{";
       output += "S:" + String(State) + ",";
+      output += "PS:" + String(imageR.photoSize()) + ",";
       output += "GX:" + String(Gyro[0]) + ",GY:" + String(Gyro[1]) + ",GZ:" + String(Gyro[2]) + ",";
       output += "MX:" + String(Mag[0]) + ",MY:" + String(Mag[1]) + ",MZ:" + String(Mag[2]) + ",";
       output += "IT:" + String(ImuTemp) + ",";
@@ -696,8 +737,12 @@ masterStatus masterStatusHolder;
 //Helper Functions
 
 void initalizePinOut() {
-  ///const int DoorSens = 13; pinMode(DoorSens, INPUT); //WRONG
-  pinMode(13, OUTPUT); //Red LED
+  //const int DoorSens = 13; pinMode(DoorSens, INPUT); //WRONG
+  if (LED_NOT_DOOR) {
+    pinMode(DoorSensePin, OUTPUT); //Red LED and Door Sensor (-_-)
+  } else {
+    pinMode(DoorSensePin, INPUT_PULLUP);
+  }
   pinMode(DoorTrig, OUTPUT);
   pinMode(BatteryPin, INPUT);
   //RockBlock Serial Into FCom
@@ -721,6 +766,8 @@ void initalizePinOut() {
 
 float getCurrentAmp(int panel) {
   //Returns Amperage of current sensors at senseCurrent 4v/amp (40k resistor)
+  //1v/A @10k
+  //8.2V/A @82k
   float current;
   switch (panel) {
     case 1:
@@ -760,8 +807,10 @@ float getCurrentAmp(int panel) {
         current = 0;
       } break;
   }
-  current = map(current, 0, 1023, 0, .825); //3.3V=.825A
-  // 4V/A with a 40k Resistor
+  //0.12195
+  //Serial.println(current);
+  current = fmap((float)current, 0.0, 1023.0, 0, .40244); //3.3V=.825A
+  // 8.2V/A with a 82k Resistor
   return current;
 }
 
@@ -788,23 +837,26 @@ void waitForInterrupt() {
   //noInterrupts();
 }
 
-void SensorDataCollect() {
-  if (ImuWireConnected) { //TODO
-    masterStatusHolder.updateSensors();
-    IMUrecords++;
-    //Request Light/Temp Data From Slave
-    if (millis() - lastIMUTime > imuSensorDwell) {
+void SensorDataCollect() { //TODO
+  masterStatusHolder.updateSensors();
+  IMUrecords++;
+  //Request Light/Temp Data From Slave
+  if (millis() - lastIMUTime > imuSensorDwell) {
+    if (imuWorking) {
       masterStatusHolder.Gyro[0] = masterStatusHolder.GyroAcc[0] / ((float)IMUrecords);
       masterStatusHolder.Gyro[1] = masterStatusHolder.GyroAcc[1] / ((float)IMUrecords);
       masterStatusHolder.Gyro[2] = masterStatusHolder.GyroAcc[2] / ((float)IMUrecords);
       masterStatusHolder.Mag[0] = masterStatusHolder.MagAcc[0] / ((float)IMUrecords);
       masterStatusHolder.Mag[1] = masterStatusHolder.MagAcc[1] / ((float)IMUrecords);
       masterStatusHolder.Mag[2] = masterStatusHolder.MagAcc[2] / ((float)IMUrecords);
-      IMUrecords = 0;
+      masterStatusHolder.ImuTemp = masterStatusHolder.TempAcc / ((float)IMUrecords);
+      masterStatusHolder.TempAcc = 0;
       masterStatusHolder.GyroAcc[0] = 0; masterStatusHolder.GyroAcc[1] = 0; masterStatusHolder.GyroAcc[2] = 0;
       masterStatusHolder.MagAcc[0] = 0; masterStatusHolder.MagAcc[1] = 0; masterStatusHolder.MagAcc[2] = 0;
-      lastIMUTime = millis();
     }
+    masterStatusHolder.Battery = masterStatusHolder.BatteryAcc / ((float)IMUrecords); masterStatusHolder.BatteryAcc = 0;
+    lastIMUTime = millis();
+    IMUrecords = 0;
   }
 }
 
@@ -863,12 +915,26 @@ boolean isInputValid(String input) {
           break;
         }
       } else if (currentChar == ('!')) {
+        if (input[q - 2] == ',') {
+          //Serial.println("No Second Command Number");
+          valid = false;
+          break;
+        }
         //Serial.println("Excl Found");
         if (lastPunc == 1) {
           //Serial.println("Period ok");
           lastPunc = 2;
         } else {
           //Serial.println("2 Excl or No prior comma");
+          valid = false;
+          break;
+        }
+      } else if (currentChar == ('-')) {
+        //Serial.println("Hypen Found");
+        if (input[q - 2] == ',') { //q incremented after value capture
+          //Serial.println("Negative Sign ok");
+        } else {
+          //Serial.println("Hyphen in wrong place");
           valid = false;
           break;
         }
@@ -923,11 +989,43 @@ void popCommands() {
       switch (currentCommand[0]) {
         case (91): //Arm Deployment
           masterStatusHolder.NextState = DEPLOY_ARMED;
-        case (92):
-          deployTimeOut = (currentCommand[1]) * 1000;
+        case (92): //Set Deploy Timeout (seconds)
+          if (currentCommand[1] >= 2000) {
+            deployTimeOut = (currentCommand[1]) * 1000;
+          }
           break;
-        case (93):
-          manualTimeout = (currentCommand[1]);
+        case (93): //Set Manual Function Timeout (millis)
+          if (currentCommand[1] >= 2000) {
+            manualTimeout = (currentCommand[1]);
+          }
+          break;
+
+        case (94): { //Toggle ADCS
+            String com = "91," + String(currentCommand[1]) + "!";
+            sendSCommand(com);
+            break;
+          }
+        case (95): { //Set Master-Slave Command Time (millis)
+            if (currentCommand[1] > 0) {
+              SComTime = currentCommand[1];
+            }
+            break;
+          }
+        case (51): //Take Photos
+          sendSCommand("101,1!");
+          break;
+        case (52): { //Set PhotoBurst Time
+            String com = "102," + String(currentCommand[1]) + "!";
+            sendSCommand(com);
+            break;
+          }
+        case (53): { //Get # of Available Photos
+            Serial.println("Photos Available: " + String(masterStatusHolder.numPhotos));
+            break;
+          }
+        case (54): //Wipe SD Card
+          Serial.println("Wiping SD Card");
+          sendSCommand("107,1!");
           break;
         case (61):
           masterStatusHolder.MResets = (currentCommand[1]);
@@ -980,18 +1078,52 @@ void popCommands() {
         case (77):
           masterStatusHolder.SBDRT = (currentCommand[1]);
           break;
-        case (81):
-          masterStatusHolder.RequestingImageStatus = 1;
-          String com = "103," + String(currentCommand[1]) + "!";
-          sendSCommand(com);
-          char filename[9];
-          strcpy(filename, "A0000.JPG");
-          filename[1] = '0' + currentCommand[1] / 1000;
-          filename[2] = '0' + currentCommand[1] % 1000 / 100;
-          filename[3] = '0' + currentCommand[1] % 1000 % 100 / 10;
-          filename[4] = '0' + currentCommand[1] % 1000 % 100 % 10;
-          masterStatusHolder.imageR.Filename = filename;
-          break;
+        case (81): {
+            masterStatusHolder.imageR = RAMImage();
+            masterStatusHolder.RequestingImageStatus = 1;
+            masterStatusHolder.NextState = IMAGE_REQUEST;
+            String com = "103," + String(currentCommand[1]) + "!";
+            sendSCommand(com);
+            char filename[9];
+            strcpy(filename, "A0000.JPG");
+            filename[1] = '0' + currentCommand[1] / 1000;
+            filename[2] = '0' + currentCommand[1] % 1000 / 100;
+            filename[3] = '0' + currentCommand[1] % 1000 % 100 / 10;
+            filename[4] = '0' + currentCommand[1] % 1000 % 100 % 10;
+            masterStatusHolder.imageR.Filename = filename;
+            break;
+          }
+        case (83): {
+            masterStatusHolder.RequestingImageStatus = 0;
+            masterStatusHolder.NextState = NORMAL_OPS;
+            //DANGER
+            break;
+          }
+        case (111): { //Force SBDIX
+            Serial.println("Sent SBDIX");
+            sendSBDIX(false); //Does NOT sent Attempting Link to True
+            break;
+          }
+        case (112): { //Force Ping
+            Serial.println("Sent AT\\r");
+            Serial1.print(F("AT\r"));
+            break;
+          }
+        case (113): { //Force Disable Flow Control
+            Serial.println("Sent AT&K0\\r");
+            Serial1.print(F("AT&K0\r"));
+            break;
+          }
+        case (114): {  //Force Diable RING //TODO
+            //            Serial.println("Sent ");
+            //            Serial1.print();
+            break;
+          }
+        case (120):  //Set Broken Components
+          if (currentCommand[1] <= 10) {
+            masterStatusHolder.hardwareAvTable[currentCommand[1]] =
+              !masterStatusHolder.hardwareAvTable[currentCommand[1]];
+          }
       }
     } else {
       //Serial.println("No Command");
@@ -1000,9 +1132,9 @@ void popCommands() {
 }
 
 void readSerialAdd2Buffer() {
-  //Modify for RB Communication
+  //Testing
   if (Serial.available() > 0) {
-    //Serial.println("Recieving Command");
+    Serial.println("Reading Testing Command");
     String comString = "";
     while (Serial.available() > 0) {
       // get the new byte:
@@ -1010,12 +1142,13 @@ void readSerialAdd2Buffer() {
       // add it to the inputString:
       comString += inChar;
     }
+    Serial.println("TCommand: " + comString);
     if (isInputValid(comString)) {
-      //Serial.println("Command is Valid");
+      Serial.println("Testing Command is Valid");
       buildBuffer(comString);
       popCommands();
     } else {
-      //Serial.println("Invalid Command");
+      Serial.println("Invalid Testing Command");
     }
   }
 }
@@ -1026,25 +1159,24 @@ void readSerialAdd2Buffer() {
 
 //Slave Functions
 
-/* Supported Commands
+/* Supported Commands Slave Can Recieved
   Send Gyro X to Slave: "11,<(String)(float)>!"
   Send Gyro Y to Slave: "12,<(String)(float)>!"
   Send Gyro Z to Slave: "13,<(String)(float)>!"
   Send Mag X to Slave: "21,<(String)(float)>!"
   Send Mag Y to Slave: "22,<(String)(float)>!"
   Send Mag Z to Slave: "23,<(String)(float)>!"
-  Z Torquer On for Heat: "41,1!"
-  Z Torquer Off for Heat: "41,0!"
+  Z Torquer On for Heat: "41,1!" //TODO
+  Z Torquer Off for Heat: "41,0!" //TODO
   Activate ACDS: "91,1!"
   Deactivate ACDS: "91,0!"
   Photo Burst Start: "101,1!"
   Photo Burst Duration: "101,<int>!" (Seconds NOT Millis)
-
 */
 
 void sendSCommand(String data) {
-  Serial.print("Command Sent to Slave: ");
-  Serial.println(data);
+  Serial.print("Command Sent to Slave: <");
+  Serial.println(data + ">");
   char com[data.length() + 1];
   data.toCharArray(com, data.length() + 1);
   if (WireConnected) {
@@ -1054,38 +1186,55 @@ void sendSCommand(String data) {
   }
 }
 
+void sectionReadToValue(String s, int * data, int dataSize) {
+  for (int i = 0; i < dataSize; i++) {
+    data[i] = (s.substring(0, s.indexOf(','))).toInt();
+    s = s.substring(s.indexOf(',') + 1);
+  }
+}
+
 uint8_t segment[4000];
 int dataIndex = 0;
 bool lastRead = false;
 int readSize = 0;
 bool requestFromSlave() {
-  Serial.println("Requesting");
   String res = "";
   bool success = false;
   if (WireConnected) {
     switch (masterStatusHolder.RequestingImageStatus) {
       case (1): { //Get Image Size
           Wire.requestFrom(11, 8, true);
-          delay(5);
+          delay(10);
           String res = "";
           while (Wire.available()) {
             res += (char)Wire.read();
           }
           readSize = res.toInt();
           Serial.println("Incoming Photo Size: " + String(readSize));
-          masterStatusHolder.RequestingImageStatus = 2;
-          sendSCommand("105,1!");
+          if (readSize > 7) {
+            masterStatusHolder.RequestingImageStatus = 2;
+            sendSCommand("105,1!");
+          } else if (readSize == 0) {
+            Serial.println("Image Didn't Exist");
+            //Update HardwareAv
+            masterStatusHolder.RequestingImageStatus = 0;
+          } else {
+            Serial.println("SD Card Not Working Transfer Aborted");
+            //Update HardwareAv
+            masterStatusHolder.RequestingImageStatus = 0;
+          }
           break;
         }
       case (2): { //Get Image Data
-          Serial.println(Wire.requestFrom(11, 16, true)); // request 64 bytes from slave device #8
-          delay(5);
+          Serial.print("Requesting Image Data: ");
+          (Wire.requestFrom(11, 32, true)); // request 64 bytes from slave device #8
+          delay(10);
           int i = 0;
-          Serial.println("AV: " + String(Wire.available()));
+          //Serial.println("AV: " + String(Wire.available()));
           while (Wire.available()) {
             segment[dataIndex] = (uint8_t)Wire.read();
-            Serial.println(segment[dataIndex]);
-            if (dataIndex >= readSize){
+            //Serial.println(segment[dataIndex]);
+            if (dataIndex >= readSize) {
               break;
             }
             dataIndex++;
@@ -1094,23 +1243,23 @@ bool requestFromSlave() {
           //printArray(segment, dataIndex);
           Serial.println(dataIndex);
           //Serial.println("i: "+String(i));
-          if (dataIndex >= readSize-1 && dataIndex > 16) { //if (i < 16) {
+          if (dataIndex >= readSize - 1 && dataIndex > 16) { //if (i < 16) {
             Serial.println("Last");
-            //dataIndex = 0;
             lastRead = true;
             //printArray(segment, dataIndex);
             masterStatusHolder.RequestingImageStatus = 0;
             masterStatusHolder.imageR.store(segment, dataIndex);
+            dataIndex = 0;
 
             //Will reset Slave from ImageTransmit Mode
 
           } else {
-            Serial.println("Not Last");
+            //Serial.println("Not Last");
           }
           break;
         }
       case (0): {
-          Wire.requestFrom(11, 10, true); // request 10 bytes from slave device #8
+          Wire.requestFrom(11, 40, true); // request 10 bytes from slave device #8
           //delay(50);
           int endTime = millis() + manualTimeout;
           //Serial.println("Here");
@@ -1120,16 +1269,46 @@ bool requestFromSlave() {
           if (Wire.available()) {
             success = true;
           }
-          masterStatusHolder.MResets = (int)((uint8_t)Wire.read());
-          masterStatusHolder.AnalogTemp = (int)((uint8_t)Wire.read());
-          masterStatusHolder.LightSense = (int)((uint8_t)Wire.read());
-          masterStatusHolder.CurXDir  = (int)((uint8_t)Wire.read());
-          masterStatusHolder.CurYDir = (int)((uint8_t)Wire.read());
-          masterStatusHolder.CurZDir = (int)((uint8_t)Wire.read());
-          masterStatusHolder.CurXPWM = (int)((uint8_t)Wire.read());
-          masterStatusHolder.CurYPWM = (int)((uint8_t)Wire.read());
-          masterStatusHolder.CurZPWM = (int)((uint8_t)Wire.read());
-          masterStatusHolder.numPhotos = (int)((uint8_t)Wire.read());
+          //Serial.println(Wire.available());
+          //          masterStatusHolder.MR = ((uint8_t)Wire.read());
+          //          masterStatusHolder.AT = ((uint8_t)Wire.read());
+          //          masterStatusHolder.LS = ((uint8_t)Wire.read());
+          //          masterStatusHolder.XD  = ((uint8_t)Wire.read());
+          //          masterStatusHolder.YD = ((uint8_t)Wire.read());
+          //          masterStatusHolder.ZD = ((uint8_t)Wire.read());
+          //          masterStatusHolder.XP = ((uint8_t)Wire.read());
+          //          masterStatusHolder.YP = ((uint8_t)Wire.read());
+          //          masterStatusHolder.ZP = ((uint8_t)Wire.read());
+          //          masterStatusHolder.NP = ((uint8_t)Wire.read());
+          //          uint8_t MR = ((uint8_t)Wire.read());
+          //          uint8_t AT = ((uint8_t)Wire.read());
+          //          uint8_t LS = ((uint8_t)Wire.read());
+          //          uint8_t XD = ((uint8_t)Wire.read());
+          //          uint8_t YD = ((uint8_t)Wire.read());
+          //          uint8_t ZD = ((uint8_t)Wire.read());
+          //          uint8_t XP = ((uint8_t)Wire.read());
+          //          uint8_t YP = ((uint8_t)Wire.read());
+          //          uint8_t ZP = ((uint8_t)Wire.read());
+          //          uint8_t NP = ((uint8_t)Wire.read());
+          String res = "";
+          while (Wire.available()) {
+            res += (char)Wire.read();
+          }
+          res = res.substring(0, res.indexOf('|'));
+          Serial.println("SSVs Updated: " + res);
+          int data[10];
+          sectionReadToValue(res, data, 10);
+          masterStatusHolder.MResets = data[0];
+          masterStatusHolder.AnalogTemp = data[1];
+          masterStatusHolder.LightSense = data[2];
+          masterStatusHolder.CurXDir = data[3];
+          masterStatusHolder.CurYDir = data[4];
+          masterStatusHolder.CurZDir = data[5];
+          masterStatusHolder.CurXPWM = data[6];
+          masterStatusHolder.CurYPWM = data[7];
+          masterStatusHolder.CurZPWM = data[8];
+          masterStatusHolder.numPhotos = data[9];
+
           break;
         }
     }
@@ -1170,24 +1349,28 @@ int curComL = 0;
 
 String rocResponseRead() {
   long start = millis();
-  while (!Serial1.available() && (millis() - start > 1000));
-  delay(100);
+  //Serial.print(Serial1.available());
+  while (!Serial1.available() && (millis() - start > 4000));
+  delay(10);
   String responseString = "";
 
   while (Serial1.available() > 0) {
     //NEED TO DETECT \r or Command End
     responseString += (char)Serial1.read();
+
+    if (millis() - start > 4000) {
+      Serial.println(F("Com Timeout"));
+      break;
+    }
   }
-  if (millis() - start > 3000) {
-    Serial.println(F("Com Timeout"));
-  }
+  //Serial.print(responseString);
   return responseString;
 }
 
 bool rockOKParse() {
   String input = rocResponseRead();
   bool valid = false;
-  //Serial.print(input[curComL+2]);
+  //Serial.print(input);
   if (input[2] == 'O' && input[3] == 'K') {
     valid = true;
   }
@@ -1197,6 +1380,7 @@ bool rockOKParse() {
 void RBDATA() {
   int swnumber = 0;
   String ReceivedMessage = rocResponseRead(); //determines case
+  Serial.print("<" + ReceivedMessage + ">");
   //Serial.print("ReceivedMessage:");
   //Serial.println(ReceivedMessage);
   int plus = ReceivedMessage.indexOf('+');
@@ -1313,8 +1497,8 @@ void RBDATA() {
       masterStatusHolder.LastMsgType = 3;
       //return "";
       break;
-    case 6: // blank msg
-      masterStatusHolder.LastMsgType = 0;
+    case 6: // blank msg //TODO
+      //masterStatusHolder.LastMsgType = 0;
       //return "";
       break;
     case 7: // ready
@@ -1335,16 +1519,18 @@ int lastRBcheck = 0;
 
 bool responsePing() {
   bool ping = false;
-  Serial1.print("AT\r");
+  Serial1.print(F("AT\r"));
   if (rockOKParse()) {
     ping = true;
   }
   return ping;
 }
 
-void sendSBDIX() {
-  Serial1.print(F("AT+SBDIX"));
-  masterStatusHolder.AttemptingLink = true;
+void sendSBDIX(bool AL) {
+  Serial1.print(F("AT+SBDIX")); // \r?
+  if (AL) {
+    masterStatusHolder.AttemptingLink = true;
+  }
 }
 
 //int startTest() {
@@ -1533,32 +1719,82 @@ void Stall() {
   stall = true;
   int i = 0;
   Serial.println("Awaiting Input");
-  while (stall) {
-    digitalWrite(8, HIGH);
-    delay(140);
-    digitalWrite(8, LOW);
-    delay(140);
-    Serial.print(".");
-    i++;
+  if (LED_NOT_DOOR) {
+    while (stall) {
+      digitalWrite(13, HIGH);
+      delay(40);
+      digitalWrite(13, LOW);
+      delay(40);
+      Serial.print(".");
+      i++;
+    }
+  } else {
+    while (stall) {
+      delay(80);
+      Serial.print(".");
+      i++;
+    }
   }
 }
 
 //// Main Loop
 
-const int IMAGE_REQUEST = 888;
 void setup()
 {
+
+  digitalWrite(12, HIGH);
+  attachInterrupt(digitalPinToInterrupt(12), waitForInterrupt, LOW);
   Serial.begin(9600);
   Serial1.begin(19200);
   Wire.begin(); //Start i2c as master
-  delay(500);
+  //while (!Serial);
+  delay(100);
+  //Stall();
+
+  Serial.println("\nStarting IMU");
+  ImuWireConnected = true;
+  if (!imu.begin())
+  {
+    Serial.println("IMU Failed");
+    ImuWireConnected = false;
+  }
+
+  int trys = 0;
+  //  while (true) {
+  //    if (trys % 50 == 0) {
+  //      Serial.println();
+  //    }
+  //    Serial.print("!");
+  //    if (!imu.begin()) {
+  //      Serial.println("\nIMU Active");
+  //      ImuWireConnected = true;
+  //      break;
+  //    }
+  //    if (trys > 1000) {
+  //      Serial.println("\nIMU failed, or not present");
+  //      ImuWireConnected = false;
+  //      break;
+  //    }
+  //    delay(5);
+  //    trys++;
+  //  }
+
+  //  Serial.println("Starting IMU");
+  //  if (!imu.begin())
+  //  {
+  //    Serial.println("IMU Failed");
+  //    while (1);
+  //  }
+  //Serial.println("Succesful Start");
+  Serial.println("");
+  Serial.println("");
+
+  //Stall();
+
   initalizePinOut();
   digitalWrite(SlaveReset, HIGH); //Enable Slave
-  digitalWrite(12, HIGH);
-  attachInterrupt(digitalPinToInterrupt(12), waitForInterrupt, LOW);
   //Reset Indication
   pinMode(8, OUTPUT);
-  delay(1000);
 
   Stall();
 
@@ -1571,8 +1807,11 @@ void setup()
   int endT = millis() + manualTimeout;
 
   //  Serial.println("there");
-  //  Serial.println(masterStatusHolder.imu.begin());
+  //  masterStatusHolder.configureSensor();
   //  Serial.println("there");
+
+  //  imu.setupMag(imu.LSM9DS0_MAGGAIN_2GAUSS);
+  //  imu.setupGyro(imu.LSM9DS0_GYROSCALE_245DPS);
 
   //Testing Image Downlink
   //  SD.begin(chipSelect);
@@ -1581,49 +1820,55 @@ void setup()
   //  masterStatusHolder.imageR.printRI();
   //  Serial.println("\nPrint End");
 
-  //  Serial.println(F("Starting IMU"));
-  //  while (!masterStatusHolder.imu.begin()) { // && millis() < endT) {
-  //    Serial.println(F("IMU Not working"));
-  //    delay(30);
-  //  }
 
 
   //masterStatusHolder.configureSensor(); //runs configureSensor function
   digitalWrite(8, LOW);
-  masterStatusHolder.RequestingImageStatus = 1;
-  masterStatusHolder.State = IMAGE_REQUEST;
-  masterStatusHolder.NextState = IMAGE_REQUEST;
+  masterStatusHolder.RequestingImageStatus = 0;
+  masterStatusHolder.State = NORMAL_OPS;
+  masterStatusHolder.NextState = NORMAL_OPS;
+
+  //  masterStatusHolder.RequestingImageStatus = 1;
+  //  masterStatusHolder.State = IMAGE_REQUEST;
+  //  masterStatusHolder.NextState = IMAGE_REQUEST;
+
+
+  Serial.println(F("Setup Done"));
+
 }
 
 bool downlinkJustStaged = false;
-bool ImageDownlink_Active = true;
+//bool ImageDownlink_Active = true;
 const int DOWNLINK_TESTING = 999;
 //const int IMAGE_REQUEST = 888;
 int Requests = 0;
+long linkTime = 0;
+int trys = 0;
 void loop() {
+  readSerialAdd2Buffer(); //Testing Command Input
   //masterStatusHolder.State = IMAGE_REQUEST;
   switch (masterStatusHolder.State) {
     case (777): //Stall State
       Serial.println("Idling in Stall State");
       Stall();
-      masterStatusHolder.NextState = IMAGE_REQUEST;
-      masterStatusHolder.RequestingImageStatus = 1;
+      masterStatusHolder.NextState = NORMAL_OPS;//NORMAL_OPS;
+      masterStatusHolder.RequestingImageStatus = 0;
       break;
     case (IMAGE_REQUEST): {
-        Serial.println("Here");
+        //Serial.println("Here");
         //Serial.println(masterStatusHolder.RequestingImage);
         //delay(100);
         switch (masterStatusHolder.RequestingImageStatus) {
           case (2): {
-              Serial.println("Image Data Requested");
+              //Serial.println("Image Data Requested");
               requestFromSlave();
               Requests++;
-              if (Requests > 500) {
+              if (Requests > 800) {
                 Serial.println("Image Transfer Fail");
                 Requests = 0;
                 lastRead = false;
                 masterStatusHolder.RequestingImageStatus = 0;
-                masterStatusHolder.NextState = 777;//DOWNLINK_TESTING ?
+                masterStatusHolder.NextState = NORMAL_OPS;//DOWNLINK_TESTING ?
                 sendSCommand("104,1!");
               }
               //delay(5);
@@ -1634,25 +1879,25 @@ void loop() {
                 masterStatusHolder.RequestingImageStatus = 0;
                 Requests = 0;
                 lastRead = false;
-                masterStatusHolder.NextState = 777;//DOWNLINK_TESTING ?
+                masterStatusHolder.NextState = DOWNLINK_TESTING; //NORMAL_OPS;// ?
                 sendSCommand("104,1!");
                 Serial.println("");
                 masterStatusHolder.imageR.printRI();
-                Stall();
+                //Stall();
                 Serial.println("");
                 break;
               }
               break;
             }
           case (1): {
-              sendSCommand("103,1111!");
               delay(10);
               requestFromSlave();
               break;
             }
           case (0): {
               //Shouldn't be here
-              masterStatusHolder.NextState = 777;
+              //Serial.println("State 0");
+              masterStatusHolder.NextState = NORMAL_OPS;
               break;
             }
         }
@@ -1660,34 +1905,47 @@ void loop() {
       }
 
     case (DOWNLINK_TESTING):
-      if (ImageDownlink_Active) {
-        if (masterStatusHolder.currentSegment <= masterStatusHolder.imageR.finalIndex) {
-          if (masterStatusHolder.MOStatus == 0) { //|| masterStatusHolder.currentSegment == 0) {
-            //Attempt Segment Downlink
-            if (!masterStatusHolder.AttemptingLink) {
-              int error = downlinkSegment(masterStatusHolder.currentSegment);
-              if (error == 0) {
-                //Success
-                masterStatusHolder.MOStatus = 13;
-                downlinkJustStaged = true;
-                Serial.println("Segment " + String(masterStatusHolder.currentSegment) + " Staged");
-              } else {
-                //Fail
-                Serial.println("Error: " + String(error));
-              }
+      //if (ImageDownlink_Active) {
+      if (masterStatusHolder.currentSegment <= masterStatusHolder.imageR.finalIndex) {
+        if (masterStatusHolder.MOStatus == 0) { //|| masterStatusHolder.currentSegment == 0) {
+          //Attempt Segment Downlink
+          if (!masterStatusHolder.AttemptingLink) {
+            int error = downlinkSegment(masterStatusHolder.currentSegment);
+            if (error == 0) {
+              //Success
+              masterStatusHolder.MOStatus = 13;
+              downlinkJustStaged = true;
+              Serial.println("Segment " + String(masterStatusHolder.currentSegment) + " Staged");
             } else {
-              Serial.println("Still Attempting Link");
+              //Fail
+              Serial.println("Error: " + String(error));
             }
           } else {
-            if (downlinkJustStaged) {
-              //SBDIX Call after SBDWB
-              sendSBDIX();
-              downlinkJustStaged = false;
-            }
-            RBDATA(); //Can Reset MOStatus
+            Serial.print("Still Attempting Link: ");
+            Serial.println(linkTime / 1000.0);
+            delay(50);
           }
+        } else {
+          if (downlinkJustStaged) {
+            //SBDIX Call after SBDWB
+            Serial.print("SBDIX Sent");
+            sendSBDIX(true); //Attempting Link is true after this
+
+            linkTime = millis();
+            //downlinkJustStaged = true;
+            downlinkJustStaged = false;
+          }
+          if (trys % 50 == 0) {
+            Serial.println("");
+          }
+          //Serial.print("w");
+          trys++;
+
+          RBDATA(); //Can Reset MOStatus to 0
+          delay(200);
         }
       }
+      //}
       break;
 
     case (NORMAL_OPS):
@@ -1696,7 +1954,16 @@ void loop() {
       SensorDataCollect();
 
       if (millis() - lastRBCheck >= RBCheckTime) {
-        //Do RockBlock Stuff
+        Serial.print("<R");
+
+        Serial1.println("AT\r");
+        Serial.print(String(rockOKParse()) + ">");
+        //        //delay(10);
+        //        RBDATA();
+        //        Serial1.print(F("AT&K0\r"));
+        //        delay(10);
+        //        RBDATA();
+        lastRBCheck = millis();
       }
 
       //Testing IMU and Sensor Downlink String Generator
@@ -1714,7 +1981,7 @@ void loop() {
         //unsigned long t = millis();
         if (millis() - lastSComAttempt >= SComTime) {
           lastSComAttempt = millis();
-          Serial.println("\nSlave IMU transfer");
+          Serial.print("\nSlave IMU transfer: ");
           sendIMUToSlave();
           bool SlaveResponse = requestFromSlave();
 
@@ -1771,13 +2038,15 @@ void loop() {
 
       //Blinker for Testing
       if (millis() - ledLastTime >= 100) {
-        unsigned long t = millis() - ledLastTime;
-        if (ledState == LOW) {
-          ledState = HIGH;
-        } else {
-          ledState = LOW;
+        if (LED_NOT_DOOR) {
+          //unsigned long t = millis() - ledLastTime;
+          if (ledState == LOW) {
+            ledState = HIGH;
+          } else {
+            ledState = LOW;
+          }
+          digitalWrite(13, ledState);
         }
-        digitalWrite(13, ledState);
         Serial.print(F("."));
         //        Serial.print("Running: ");
         //        Serial.print(t);
@@ -1928,11 +2197,11 @@ void loop() {
   //Serial.println(cycle);
 
   //ROCKBLOCK
-  if (millis() - lastRBcheck >= ((long)300000)) {
-    RBDATA();
-    //responsePing();
-    lastRBcheck = millis();
-  }
+  //  if (millis() - lastRBcheck >= ((long)300000)) {
+  //    RBDATA();
+  //    //responsePing();
+  //    lastRBcheck = millis();
+  //  }
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////
