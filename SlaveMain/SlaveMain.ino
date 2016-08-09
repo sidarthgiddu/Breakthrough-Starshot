@@ -220,7 +220,7 @@ class slaveStatus
       imageR = RAMImageSlave();
       ITStatus = 0;
 
-      ADCS_Active = false;
+      ADCS_Active = true; //false;
       SDActive = false;
       Temp = t;
       TempAcc = 0;
@@ -388,7 +388,7 @@ void runADCS(double* Bvalues, double* gyroData, double Kp, double Kd) {
   double Bcmd[3] = {0, 0, 1};
   double A = 0.532;
 
-  Matrix.copy((double*)gyroData, 3, 1, (double*)OmegaHat);
+  Matrix.Copy((double*)gyroData, 3, 1, (double*)OmegaHat);
   Matrix.Scale((double*)OmegaHat, 3, 1, 1/OmegaMagnitude);
   Matrix.Scale((double*)Bfield, 3, 1, 1 / Bmagnitude);
 
@@ -397,24 +397,30 @@ void runADCS(double* Bvalues, double* gyroData, double Kp, double Kd) {
   //////////////Serial.println(freeRam ());
 
   /////// BfieldError NEW VERSION
+  Matrix.Print((double*)Bfield, 3, 1, "Normalized Bfield");
   double upperbnd = 1.2349, lowerbnd = 0.8098;
   double theta = sqrt((Bfield[0]-OmegaHat[0])*(Bfield[0]-OmegaHat[0])
             +(Bfield[1]-OmegaHat[1])*(Bfield[1]-OmegaHat[1]));
-            Serial.println ("theta is: "+theta);
+            Serial.println ("theta is: "+String(theta));
   double ex = (Bfield[0]-OmegaHat[0])/theta;
   double ey = (Bfield[1]-OmegaHat[1])/theta;
   theta = ey/ex;
 
   // test //////// RBF!!!!!!!!!!!! ======================================== ////////////////////////
   theta = 1; // <==================   REMOVE THIS BEFORE FLIGHT //TODO
+  Serial.println ("theta is: "+ String(theta));
   
   if ((theta <= upperbnd) && (theta >= lowerbnd)){
       BfieldError[0] = Bfield[1]*OmegaHat[2] - Bfield[2]*OmegaHat[1];
       BfieldError[1] = Bfield[2]*OmegaHat[0] - Bfield[0]*OmegaHat[2];
       BfieldError[2] = Bfield[0]*OmegaHat[1] - Bfield[1]*OmegaHat[0];
+      Matrix.Print((double*)BfieldError, 3, 1, "Updated BfieldError");
       Matrix.Scale((double*)BfieldError, 3, 1, (Kp/A));
+      Matrix.Print((double*)BfieldError, 3, 1, "Scaled BfieldError");
     } else { 
-    BfieldError = {0,0,0};
+    BfieldError[0] = 0;
+    BfieldError[1] = 0;
+    BfieldError[2] = 0;
   }
   /////// END of BfieldError NEW VERSION
   
@@ -1119,7 +1125,7 @@ void loop() {
   readSerialAdd2Buffer();
   //Serial.println(SDActive);
   StatusHolder.updatePassive();
-  StatusHolder.ADCS_Active = false;
+  //StatusHolder.ADCS_Active = false;
   //Test ADCS
   if (StatusHolder.ADCS_Active) {
     if (millis() - lastADCSTime >= 2000) {
@@ -1192,8 +1198,8 @@ void loop() {
     }
   } else {
     //ADCS Off
-    floatTuple PWMvaluesForTorquers = floatTuple(10, 20, 30);
-    floatTuple PWMdirectionsForTorquers = floatTuple(-1, 0, 1);
+    floatTuple PWMvaluesForTorquers = floatTuple(0, 0, 0);
+    floatTuple PWMdirectionsForTorquers = floatTuple(0, 0, 0);
     StatusHolder.updateTorquers(PWMdirectionsForTorquers, PWMvaluesForTorquers);
   }
 
