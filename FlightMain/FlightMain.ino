@@ -1010,11 +1010,12 @@ void popCommands() {
         case (96): //Test Force Deploy
           digitalWrite(DoorTrig, HIGH);
           break;
-        case (97): //Check System Time
-          long t = millis();
-          Serial.println("<<System Time: "String(t % (long)60 * 60000) + ":" +
-                         String(t % (long)60000) + ":" + String(t % (long)1000) + ">>");
-          break;
+        case (97): { //Check System Time
+            long t = millis();
+            Serial.println("<<System Time: "+String(t % (long)60 * 60000) + ":" +
+                           String(t % (long)60000) + ":" + String(t % (long)1000) + ">>");
+            break;
+          }
         case (51): //Take Photos
           sendSCommand("101,1!");
           break;
@@ -2164,7 +2165,7 @@ void loop() {
   //Serial.println(cycle);
   if (masterStatusHolder.State == NORMAL_OPS && (millis() % (long)60000 == 0)) {
     long t = millis();
-    Serial.println("<<System Time: "String(t % (long)60 * 60000) + ":" +
+    Serial.println("<<System Time: "+String(t % (long)60 * 60000) + ":" +
                    String(t % (long)60000) + ":" + String(t % (long)1000) + ">>");
   }
 }
