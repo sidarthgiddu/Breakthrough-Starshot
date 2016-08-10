@@ -543,7 +543,7 @@ void clearSDCard(int i) {
     } else {
       notExists++;
     }
-    if (notExists > 10) {
+    if (notExists > 3) {
       return;
     }
   }
@@ -941,7 +941,6 @@ String takePic(int ImageSize) {
   char filename[9];
   strcpy(filename, "A0000.JPG");
   for (int i = 0; i < 9999; i++) {
-    Serial.print(i);
     filename[1] = '0' + i / 1000;
     filename[2] = '0' + i % 1000 / 100;
     filename[3] = '0' + i % 1000 % 100 / 10;
