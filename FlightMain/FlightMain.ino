@@ -690,7 +690,7 @@ class masterStatus {
       int roundedNum = round(pow(10, places) * num);
       return roundedNum / ((float)(pow(10, places)));
     }
-    
+
     String chop(float num, int p) {
       String s = String(num);
       if (p == 0) {
@@ -698,7 +698,7 @@ class masterStatus {
       }
       return s.substring(0, s.indexOf('.') + p + 1);
     }
-    
+
     String OutputString() {
       //round floats first
       //(round(),2)
@@ -734,11 +734,17 @@ class masterStatus {
       OutputString += chop (constrain(roundDecimal(CurZDir, 0), -1, 1), 0) + ",";
       OutputString += chop (constrain(roundDecimal(CurZPWM, 2), 0, 4), 2) + ",";
       //      if string length less thatn max number add random symbols until it is max length
+
+      for (int i = 109 - OutputString.length(); i <= (109 - OutputString.length() + 1); i++) {
+      OutputString[i] = 2;
+      }
+
+
       byte DLBIN[OutputString.length()];
       OutputString.getBytes(DLBIN, OutputString.length());
       Serial.print(OutputString);
       for (int i = 0; i < OutputString.length() - 1; i++) {
-        Serial.print("00");
+      Serial.print("00");
         Serial.print(DLBIN[i], BIN);
         Serial.print(" ");
       }
