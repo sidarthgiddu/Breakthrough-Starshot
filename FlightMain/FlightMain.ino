@@ -532,18 +532,19 @@ class masterStatus {
     //[Imu, SX+,SX-,SY+, SY-, SZ+, SZ-,Temp,DoorSense,LightSense]
     //Fix PopCommand Av Swap Limit if changed
 
+    // change final string to binary. get bytes. find upper and lower limits. round floats and set value for maxes (like MAX)
     int State;
     int NextState;
-    float Mag[3];
-    float Gyro[3];
-    float Accel[3];
-    float MagAcc[3];
+    float Mag[3]; // max 0.65 gauss min -0.65 gauss
+    float Gyro[3];  //
+    float Accel[3]; //
+    float MagAcc[3]; //
     float GyroAcc[3];
     float AccelAcc[3];
-    int TempAcc;
-    int ImuTemp;
-    float Battery;
-    float BatteryAcc;
+    int TempAcc; // max 70C min -50C
+    int ImuTemp; // max 70C min -50C
+    float Battery; // max 4.2V min 2.75V
+    float BatteryAcc; //
     float SolarXPlus;
     float SolarXMinus;
     float SolarYPlus;
@@ -587,7 +588,7 @@ class masterStatus {
     int MTQueued;
     String SBDRT;
     int LastMsgType;
-    int LastSMsgType
+    int LastSMsgType;
     //LastMsgType values:
     //0 = inval
     //1 = ok
@@ -696,8 +697,11 @@ class masterStatus {
     //        //imu.setupAccel(imu.LSM9DS0_ACCEL_MG_LSB_2G);
     //      }
     //    }
-
+    //
     String toString() {
+      // float = number + exponent
+      // bitwise operators (bitshift)
+      // bit shift =
       //Produces JSON Output in ASCII  for Downlink
       String output = "";
       output += "{";
@@ -725,6 +729,50 @@ class masterStatus {
       output += "ZD:" + String(CurZDir) + ",";
       output += "ZP:" + String(CurZPWM) + "}";
       return output;
+    }
+    float roundDecimal(float num, int places) {
+      int roundedNum = round(pow(10, places) * num);
+      return roundedNum / ((float)(pow(10, places)));
+    }
+
+    String OutputString() {
+      //round floats first
+      //(round(),2)
+      //constrain
+      //getbytes for loop
+      String OutputString = "";
+      OutputString += String constrain(round(Gyro[0]), -245, 245)+",";
+      OutputString += String constrain(round(Gyro[1]), -245, 245)+",";
+      OutputString += String constrain(round(Gyro[2]), -245, 245)+",";
+      OutputString += String constrain((roundDecimal(Mag[0], 2)), -2, 2)+",";
+      OutputString += String constrain((roundDecimal(Mag[1], 2)), -2, 2)+",";
+      OutputString += String constrain((roundDecimal(Mag[2], 2)), -2, 2)+",";
+      OutputString += String constrain(round(ImuTemp), -60, 90)+",";
+      OutputString += String constrain(round(AnalogTemp), -60, 90)+",";
+      OutputString += String constrain((roundDecimal(Battery, 2)), 2.75, 4.2)+",";
+      OutputString += String constrain(round(1000 * SolarXPlus), 0, 300)+",";
+      OutputString += String constrain(round(1000 * SolarXMinus), 0, 300)+",";
+      OutputString += String constrain(round(1000 * SolarYPlus), 0, 300)+",";
+      OutputString += String constrain(round(1000 * SolarYMinus), 0, 300)+",";
+      OutputString += String(constrain(round(1000 * SolarZPlus), 0, 300))+",";
+      OutputString += String (constrain(round(1000 * SolarZMinus), 0, 300))+",";
+      OutputString += String (constrain((roundDecimal(DoorSense, 2)), 0, 4))+",";
+      OutputString += String(constrain(round(LightSense), 0, 100))+",";
+      OutputString += String(constrain(round(numPhotos), 0, 99))+",";
+      //      String(hardwareAvTable[0]);
+      //      String(SlaveWorking);//TODO
+      //      String(Resets);
+      //      String(ADCS_Active);
+      OutputString += String(constrain(round(CurXDir), -1, 1))+",";
+      OutputString += String(constrain(round(CurXPWM), 0, 4))+",";
+      OutputString += String(constrain(round(CurYDir), -1, 1))+",";
+      OutputString += String(constrain(round(CurYPWM), 0, 4))+",";
+      OutputString += String(constrain(round(CurZDir), -1, 1))+",";
+      OutputString += String(constrain(round(CurZPWM), 0, 4))+",";
+      //      if string length less thatn max number add random symbols until it is max length
+      Serial.print(OutputString);
+      return OutputString;
+      
     }
 };
 masterStatus masterStatusHolder;
@@ -1970,6 +2018,8 @@ void loop() {
       if (millis() - lastDLTime >= DLTime || commandedDL) {
         //Send Data to RockBlock via Serial
         String DLS = masterStatusHolder.toString();
+       // byte * DLSBytes = masterStatusHolder.toBytes();
+
         Serial.println(F(""));
         Serial.println(DLS);
         //Serial.println(DLS.length());
