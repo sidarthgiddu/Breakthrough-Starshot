@@ -5,7 +5,6 @@
 #include <SD.h>
 
 ////Constant Initialization
-bool TestReset = false;
 int MasterFaultTime = 5 * 60 * 1000;
 int lastMasterCom = 0;
 uint8_t resets = 0;
