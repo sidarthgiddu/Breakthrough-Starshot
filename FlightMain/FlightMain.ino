@@ -2018,7 +2018,7 @@ void loop() {
       if (millis() - lastDLTime >= DLTime || commandedDL) {
         //Send Data to RockBlock via Serial
         String DLS = masterStatusHolder.toString();
-       // byte * DLSBytes = masterStatusHolder.toBytes();
+        String DLSshort = masterStatusHolder.OutputString();
 
         Serial.println(F(""));
         Serial.println(DLS);
