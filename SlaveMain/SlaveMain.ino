@@ -220,7 +220,7 @@ class slaveStatus
       imageR = RAMImageSlave();
       ITStatus = 0;
 
-      ADCS_Active = false;
+      ADCS_Active = true; //false;
       SDActive = false;
       Temp = t;
       TempAcc = 0;
@@ -381,28 +381,65 @@ void runADCS(double* Bvalues, double* gyroData, double Kp, double Kd) {
   Jp[2][0] = Jppinv[2][0]; Jp[2][1] = Jppinv[2][1]; Jp[2][2] = Jppinv[2][2];
   Matrix.Scale((double*)Jp, 3, 3, 1000000.0);
   //////////////Serial.println(freeRam ());
-  double OmegaError[3], BfieldError[3], ErrorSum[3], current[3];
+  double OmegaError[3], BfieldError[3], ErrorSum[3], current[3], OmegaHat[3];
   double Omegacmd[3] = {0, 0, 1};
   double Bmagnitude = sqrt(Bvalues[0] * Bvalues[0] + Bvalues[1] * Bvalues[1] + Bvalues[2] * Bvalues[2]);
+  double OmegaMagnitude = sqrt(gyroData[0] * gyroData[0] + gyroData[1] * gyroData[1] + gyroData[2] * gyroData[2]);
   double Bcmd[3] = {0, 0, 1};
   double A = 0.532;
 
+  Matrix.Copy((double*)gyroData, 3, 1, (double*)OmegaHat);
+  Matrix.Scale((double*)OmegaHat, 3, 1, 1/OmegaMagnitude);
   Matrix.Scale((double*)Bfield, 3, 1, 1 / Bmagnitude);
 
-  Matrix.Subtract((double*) Bfield, (double*) Bcmd, 3, 1, (double*) BfieldError);
-  //Serial.println ("Step 5 complete");
   Matrix.Subtract((double*) gyroData, (double*) Omegacmd, 3, 1, (double*) OmegaError);
   //Serial.println ("Step 6 complete");
   //////////////Serial.println(freeRam ());
 
-  Matrix.Scale((double*)BfieldError, 3, 1, (Kp / A)); // scale error with proportional gain (updates array)
+  /////// BfieldError NEW VERSION
+  Matrix.Print((double*)Bfield, 3, 1, "Normalized Bfield");
+  double upperbnd = 1.2349, lowerbnd = 0.8098;
+  double theta = sqrt((Bfield[0]-OmegaHat[0])*(Bfield[0]-OmegaHat[0])
+            +(Bfield[1]-OmegaHat[1])*(Bfield[1]-OmegaHat[1]));
+            Serial.println ("theta is: "+String(theta));
+  double ex = (Bfield[0]-OmegaHat[0])/theta;
+  double ey = (Bfield[1]-OmegaHat[1])/theta;
+  theta = ey/ex;
 
+  // test //////// RBF!!!!!!!!!!!! ======================================== ////////////////////////
+  theta = 1; // <==================   REMOVE THIS BEFORE FLIGHT //TODO
+  Serial.println ("theta is: "+ String(theta));
+  
+  if ((theta <= upperbnd) && (theta >= lowerbnd)){
+      BfieldError[0] = Bfield[1]*OmegaHat[2] - Bfield[2]*OmegaHat[1];
+      BfieldError[1] = Bfield[2]*OmegaHat[0] - Bfield[0]*OmegaHat[2];
+      BfieldError[2] = Bfield[0]*OmegaHat[1] - Bfield[1]*OmegaHat[0];
+      Matrix.Print((double*)BfieldError, 3, 1, "Updated BfieldError");
+      Matrix.Scale((double*)BfieldError, 3, 1, (Kp/A));
+      Matrix.Print((double*)BfieldError, 3, 1, "Scaled BfieldError");
+    } else { 
+    BfieldError[0] = 0;
+    BfieldError[1] = 0;
+    BfieldError[2] = 0;
+  }
+  /////// END of BfieldError NEW VERSION
+  
+  /////// BfieldError OLD VERSION
+  /*
+   * Matrix.Subtract((double*) Bfield, (double*) Bcmd, 3, 1, (double*) BfieldError);
+  //Serial.println ("Step 5 complete");
+  Matrix.Scale((double*)BfieldError, 3, 1, (Kp / A)); // scale error with proportional gain (updates array)
+  */
+  /////// END of BfieldError OLD VERSION
+  
   //Serial.println ("Step 7 complete");
+  
+  Matrix.Add((double*)BfieldError, (double*)OmegaError, 3, 1, (double*) ErrorSum);
+  //Serial.println ("Step 9 complete"); delay(50);
+  
   Matrix.Scale((double*)OmegaError, 3, 1, (Kd / A)); // scale error with derivative gain (updates array)
   //Serial.println ("Step 8 complete");
 
-  Matrix.Add((double*)BfieldError, (double*)OmegaError, 3, 1, (double*) ErrorSum);
-  //Serial.println ("Step 9 complete"); delay(50);
   Matrix.Scale((double*) ErrorSum, 3, 1, -1.0); // prep error for multiplication with the Jpinv matrix
   //Serial.println ("Step 10 complete"); delay(50);
 
@@ -1087,7 +1124,7 @@ void loop() {
   readSerialAdd2Buffer();
   //Serial.println(SDActive);
   StatusHolder.updatePassive();
-  StatusHolder.ADCS_Active = false;
+  //StatusHolder.ADCS_Active = false;
   //Test ADCS
   if (StatusHolder.ADCS_Active) {
     if (millis() - lastADCSTime >= 2000) {
@@ -1160,8 +1197,8 @@ void loop() {
     }
   } else {
     //ADCS Off
-    floatTuple PWMvaluesForTorquers = floatTuple(10, 20, 30);
-    floatTuple PWMdirectionsForTorquers = floatTuple(-1, 0, 1);
+    floatTuple PWMvaluesForTorquers = floatTuple(0, 0, 0);
+    floatTuple PWMdirectionsForTorquers = floatTuple(0, 0, 0);
     StatusHolder.updateTorquers(PWMdirectionsForTorquers, PWMvaluesForTorquers);
   }
 
