@@ -730,50 +730,71 @@ class masterStatus {
       output += "ZP:" + String(CurZPWM) + "}";
       return output;
     }
-    float roundDecimal(float num, int places) {
-      int roundedNum = round(pow(10, places) * num);
-      return roundedNum / ((float)(pow(10, places)));
-    }
+ float roundDecimal(float num, int places) {
+  int roundedNum = round(pow(10, places) * num);
+  return roundedNum / ((float)(pow(10, places)));
+}
+String chop(float num, int p) {
+  String s = String(num);
+  if (p == 0) {
+    return s.substring(0, s.indexOf('.'));
+  }
+  return s.substring(0, s.indexOf('.') + p + 1);
+}
+String OutputString() {
+  //round floats first
+  //(round(),2)
+  //constrain
+  //getbytes for loop
+  String OutputString = "";
+  OutputString += chop(constrain(roundDecimal(Gyro[0], 1), -245, 245), 1) + ",";
+  OutputString += chop (constrain(roundDecimal(Gyro[1], 1), -245, 245), 1) + ",";
+  OutputString += chop (constrain(roundDecimal(Gyro[2], 1), -245, 245), 1) + ",";
+  OutputString += chop (constrain(roundDecimal(Mag[0], 2), -2, 2), 2) + ",";
+  OutputString += chop (constrain(roundDecimal(Mag[1], 2), -2, 2), 2) + ",";
+  OutputString += chop (constrain(roundDecimal(Mag[2], 2), -2, 2), 2) + ",";
+  OutputString += chop (constrain(roundDecimal(ImuTemp, 0), -60, 90), 0) + ",";
+  OutputString += chop (constrain(roundDecimal(AnalogTemp,0), -60, 90), 0) + ",";
+  OutputString += chop (constrain(roundDecimal(Battery, 2), 2.75, 4.2), 2) + ",";
+  OutputString += chop (constrain(roundDecimal(1000 * SolarXPlus, 0), 0, 300), 0) + ",";
+  OutputString += chop (constrain(roundDecimal(1000 * SolarXMinus, 0), 0, 300), 0) + ",";
+  OutputString += chop (constrain(roundDecimal(1000 * SolarYPlus, 0), 0, 300), 0) + ",";
+  OutputString += chop (constrain(roundDecimal(1000 * SolarYMinus, 0), 0, 300), 0) + ",";
+  OutputString += chop (constrain(roundDecimal(1000 * SolarZPlus, 0), 0, 300), 0) + ",";
+  OutputString += chop (constrain(roundDecimal(1000 * SolarZMinus, 0), 0, 300), 0) + ",";
+  OutputString += chop (constrain(roundDecimal(DoorSense, 2), 0, 4), 2) + ",";
+  OutputString += chop (constrain(roundDecimal(LightSense, 0), 0, 100), 0) + ",";
+  OutputString += chop (constrain(roundDecimal(numPhotos, 0), 0, 99), 0) + ",";
+  //      String(hardwareAvTable[0]);
+  //      String(SlaveWorking);//TODO
+  //      String(Resets);
+  //      String(ADCS_Active);
+  OutputString += chop (constrain(roundDecimal(CurXDir,0), -1, 1),0) + ",";
+  OutputString += chop (constrain(roundDecimal(CurXPWM,2), 0, 4),2) + ",";
+  OutputString += chop (constrain(roundDecimal(CurYDir,0), -1, 1),0) + ",";
+  OutputString += chop (constrain(roundDecimal(CurYPWM,2), 0, 4),2) + ",";
+  OutputString += chop (constrain(roundDecimal(CurZDir,0), -1, 1),0) + ",";
+  OutputString += chop (constrain(roundDecimal(CurZPWM,2), 0, 4),2) + ",";
+  //      if string length less thatn max number add random symbols until it is max length
+  byte DLBIN[OutputString.length()];
+  OutputString.getBytes(DLBIN, OutputString.length());
+  Serial.print(OutputString);
+  for (int i = 0; i < OutputString.length() - 1; i++) {
+    Serial.print("00");
+    Serial.print(DLBIN[i], BIN);
+    Serial.print(" ");
+  }
+  Serial.println("");
+  return OutputString;
 
-    String OutputString() {
-      //round floats first
-      //(round(),2)
-      //constrain
-      //getbytes for loop
-      String OutputString = "";
-      OutputString += String constrain(round(Gyro[0]), -245, 245)+",";
-      OutputString += String constrain(round(Gyro[1]), -245, 245)+",";
-      OutputString += String constrain(round(Gyro[2]), -245, 245)+",";
-      OutputString += String constrain((roundDecimal(Mag[0], 2)), -2, 2)+",";
-      OutputString += String constrain((roundDecimal(Mag[1], 2)), -2, 2)+",";
-      OutputString += String constrain((roundDecimal(Mag[2], 2)), -2, 2)+",";
-      OutputString += String constrain(round(ImuTemp), -60, 90)+",";
-      OutputString += String constrain(round(AnalogTemp), -60, 90)+",";
-      OutputString += String constrain((roundDecimal(Battery, 2)), 2.75, 4.2)+",";
-      OutputString += String constrain(round(1000 * SolarXPlus), 0, 300)+",";
-      OutputString += String constrain(round(1000 * SolarXMinus), 0, 300)+",";
-      OutputString += String constrain(round(1000 * SolarYPlus), 0, 300)+",";
-      OutputString += String constrain(round(1000 * SolarYMinus), 0, 300)+",";
-      OutputString += String(constrain(round(1000 * SolarZPlus), 0, 300))+",";
-      OutputString += String (constrain(round(1000 * SolarZMinus), 0, 300))+",";
-      OutputString += String (constrain((roundDecimal(DoorSense, 2)), 0, 4))+",";
-      OutputString += String(constrain(round(LightSense), 0, 100))+",";
-      OutputString += String(constrain(round(numPhotos), 0, 99))+",";
-      //      String(hardwareAvTable[0]);
-      //      String(SlaveWorking);//TODO
-      //      String(Resets);
-      //      String(ADCS_Active);
-      OutputString += String(constrain(round(CurXDir), -1, 1))+",";
-      OutputString += String(constrain(round(CurXPWM), 0, 4))+",";
-      OutputString += String(constrain(round(CurYDir), -1, 1))+",";
-      OutputString += String(constrain(round(CurYPWM), 0, 4))+",";
-      OutputString += String(constrain(round(CurZDir), -1, 1))+",";
-      OutputString += String(constrain(round(CurZPWM), 0, 4))+",";
-      //      if string length less thatn max number add random symbols until it is max length
-      Serial.print(OutputString);
-      return OutputString;
-      
-    }
+
+}
+
+void loop() {
+  // put your main code here, to run repeatedly:
+  OutputString();
+  delay(5000);
+}
 };
 masterStatus masterStatusHolder;
 
