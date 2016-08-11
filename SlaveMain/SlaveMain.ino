@@ -396,26 +396,26 @@ void runADCS(double* Bvalues, double* gyroData, double Kp, double Kd) {
   //////////////Serial.println(freeRam ());
 
   /////// BfieldError NEW VERSION
-  Matrix.Print((double*)Bfield, 3, 1, "Normalized Bfield");
+  //Matrix.Print((double*)Bfield, 3, 1, "Normalized Bfield");
   double upperbnd = 1.2349, lowerbnd = 0.8098;
   double theta = sqrt((Bfield[0]-OmegaHat[0])*(Bfield[0]-OmegaHat[0])
             +(Bfield[1]-OmegaHat[1])*(Bfield[1]-OmegaHat[1]));
-            Serial.println ("theta is: "+String(theta));
+            //Serial.println ("theta is: "+String(theta));
   double ex = (Bfield[0]-OmegaHat[0])/theta;
   double ey = (Bfield[1]-OmegaHat[1])/theta;
   theta = ey/ex;
 
   // test //////// RBF!!!!!!!!!!!! ======================================== ////////////////////////
   theta = 1; // <==================   REMOVE THIS BEFORE FLIGHT //TODO
-  Serial.println ("theta is: "+ String(theta));
+  //Serial.println ("theta is: "+ String(theta));
   
   if ((theta <= upperbnd) && (theta >= lowerbnd)){
       BfieldError[0] = Bfield[1]*OmegaHat[2] - Bfield[2]*OmegaHat[1];
       BfieldError[1] = Bfield[2]*OmegaHat[0] - Bfield[0]*OmegaHat[2];
       BfieldError[2] = Bfield[0]*OmegaHat[1] - Bfield[1]*OmegaHat[0];
-      Matrix.Print((double*)BfieldError, 3, 1, "Updated BfieldError");
+      //Matrix.Print((double*)BfieldError, 3, 1, "Updated BfieldError");
       Matrix.Scale((double*)BfieldError, 3, 1, (Kp/A));
-      Matrix.Print((double*)BfieldError, 3, 1, "Scaled BfieldError");
+     // Matrix.Print((double*)BfieldError, 3, 1, "Scaled BfieldError");
     } else { 
     BfieldError[0] = 0;
     BfieldError[1] = 0;
@@ -802,6 +802,9 @@ void requestEvent() {
           String s = String(StatusHolder.imageR.photosize);
           for (int i = 0; i < s.length(); i++) {
             Wire.write(s.charAt(i));
+          }
+          if(StatusHolder.imageR.photosize == 0){
+            StatusHolder.ITStatus = 0;
           }
         } else {
           //Card Not Working

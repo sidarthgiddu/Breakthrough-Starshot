@@ -43,18 +43,22 @@ unsigned long forceLPEclipseTime = 180 * 60 * 1000;
 unsigned long lastAccelTime;
 
 int LightThreshold = 80; //0-100
-float LV_Threshold = 3.2;
-float HV_Threshold = 3.4;
-float EclipseAmp_Threshold = 0.01;
+float LV_Threshold = 3.38; //Volts
+float HV_Threshold = 3.80; //Volts
+float EclipseAmp_Threshold = 0.01; //10mA
 int LT_Threshold = -10; //C
 int HT_Threshold = 60; //C
-float gyroThresholdX = 3;
-float gyroThresholdY = 3;
-float gyroThresholdZ = 3;
+float gyroThresholdX = 3; //dps
+float gyroThresholdY = 3; //dps
+float gyroThresholdZ = 3; //dps
 
 //RockBlock Test
 unsigned long lastRBCheck = 0;
 long RBCheckTime = 6000;
+unsigned int RBPings = 0;
+unsigned long DLTime = 6137;
+unsigned long lastDLTime = 0;
+bool RBPingOut = false;
 
 //IMU and Sensor Test
 Adafruit_LSM9DS0 imu = Adafruit_LSM9DS0();
@@ -105,10 +109,6 @@ const int SolarZPlusPin = A5; //Solar Current Z+
 const int SolarZMinusPin = 9; //Solar Current Z-
 const int SlaveReset = 10; //Slave Fault Handing (via Hard Reset)
 const int DoorMagEnable = 11; //Allow Door Magnetorquer to work
-
-//Downlink Test Placeholders
-long DLTime = 6137;
-long lastDLTime = 0;
 
 //Image Downlink Test
 #define chipSelect 4
@@ -562,6 +562,7 @@ class masterStatus {
 
     //ROCKBLOCK Message Variables
     bool AttemptingLink; //True if waiting for SBDIX to return
+    int RBCheckType; //State of Outgoing Communication with RockBlock. 0=ping, 1=Send SBDIX, 2=Fetch Incomming Command
     int MOStatus;
     int MOMSN;
     int MTStatus;
@@ -610,6 +611,7 @@ class masterStatus {
       RequestingImageStatus = 0;
 
       AttemptingLink = false;
+      RBCheckType = 0;
       MOStatus = 0;
       MOMSN = 0;
       MTStatus = 0;
@@ -636,7 +638,7 @@ class masterStatus {
     void updateSensors() {
       //Update Internal Sensor Variables
       if (hardwareAvTable[0]) {
-        imu.read();
+        //imu.read(); //Comment out if not working
         floatTuple M = getMagData(imu);
         floatTuple g = getGyroData(imu);
         GyroAcc[0] += g.x; GyroAcc[1] += g.y; GyroAcc[2] += g.z;
@@ -690,7 +692,7 @@ class masterStatus {
       int roundedNum = round(pow(10, places) * num);
       return roundedNum / ((float)(pow(10, places)));
     }
-    
+
     String chop(float num, int p) {
       String s = String(num);
       if (p == 0) {
@@ -698,7 +700,7 @@ class masterStatus {
       }
       return s.substring(0, s.indexOf('.') + p + 1);
     }
-    
+
     String OutputString() {
       //round floats first
       //(round(),2)
@@ -736,12 +738,12 @@ class masterStatus {
       //      if string length less thatn max number add random symbols until it is max length
       byte DLBIN[OutputString.length()];
       OutputString.getBytes(DLBIN, OutputString.length());
-      Serial.print(OutputString);
-      for (int i = 0; i < OutputString.length() - 1; i++) {
-        Serial.print("00");
-        Serial.print(DLBIN[i], BIN);
-        Serial.print(" ");
-      }
+      //      Serial.print(OutputString);
+      //      for (int i = 0; i < OutputString.length() - 1; i++) {
+      //        Serial.print("00");
+      //        Serial.print(DLBIN[i], BIN);
+      //        Serial.print(" ");
+      //      }
       Serial.println("");
       return OutputString;
     }
@@ -1004,7 +1006,6 @@ void popCommands() {
             manualTimeout = (currentCommand[1]);
           }
           break;
-
         case (94): { //Toggle ADCS
             String com = "91," + String(currentCommand[1]) + "!";
             sendSCommand(com);
@@ -1028,7 +1029,7 @@ void popCommands() {
         case (51): //Take Photos
           sendSCommand("101,1!");
           break;
-        case (52): { //Set PhotoBurst Time
+        case (52): { //Set PhotoBurst Time in seconds
             String com = "102," + String(currentCommand[1]) + "!";
             sendSCommand(com);
             break;
@@ -1374,7 +1375,7 @@ bool rockOKParse() {
   return valid;
 }
 
-void RBDATA() {
+void RBData() {
   int swnumber = 0;
   String ReceivedMessage = rocResponseRead(); //determines case
   Serial.print("<" + ReceivedMessage + ">");
@@ -1468,7 +1469,7 @@ void RBDATA() {
 
       //Safe to do here????
       masterStatusHolder.AttemptingLink = false;
-
+      masterStatusHolder.RBCheckType = 0;
       break;
 
     case 2: //SBDRT command
@@ -1583,7 +1584,7 @@ int downlinkSegment(int segIndex) {
   //  Serial.println("\n<<Response 1");
   //  /////////////////////////////////
 
-  RBDATA();
+  RBData();
   if (!(masterStatusHolder.LastMsgType == 4)) {
     //No Ready Recieved
     return 1;
@@ -1608,7 +1609,7 @@ int downlinkSegment(int segIndex) {
   //  Serial.println("\n<< Response 2");
   //  /////////////////////////////////
 
-  RBDATA();
+  RBData();
   if (!(masterStatusHolder.LastMsgType == 1)) {
     //No Ok Recieved
     return 2;
@@ -1814,9 +1815,6 @@ void loop() {
               }
               //delay(5);
               if (lastRead) {
-                //          Wire.flush();
-                //          Wire.end();
-                //          Wire.begin();
                 masterStatusHolder.RequestingImageStatus = 0;
                 Requests = 0;
                 lastRead = false;
@@ -1880,7 +1878,7 @@ void loop() {
           }
           trys++;
 
-          RBDATA(); //Can Reset MOStatus to 0
+          RBData(); //Can Reset MOStatus to 0
           delay(200);
         }
       } else {
@@ -1893,16 +1891,36 @@ void loop() {
 
       //Collect Sensor Data
       SensorDataCollect();
+
+      //RockBlock Communication
       if (millis() - lastRBCheck >= RBCheckTime) {
-        Serial.print("<R");
-        Serial1.println("AT\r");
-        Serial.print(String(rockOKParse()) + ">");
-        //        //delay(10);
-        //        RBDATA();
-        //        Serial1.print(F("AT&K0\r"));
-        //        delay(10);
-        //        RBDATA();
+        switch (masterStatusHolder.RBCheckType) {
+          case (0): //Ping RockBlock to ensure Functionality
+            if (!masterStatusHolder.AttemptingLink) {
+              Serial.print("<R");
+              Serial1.println("AT\r");
+              Serial.print(String(rockOKParse()) + ">");
+            }
+            break;
+          case (1): //Contact Iridium and Check for Messages
+            sendSBDIX(true);
+            break;
+          case (2): //Fetch Incomming Command
+            Serial1.print("AT+SBDRT\r");
+        }
+        delay(100);
+        RBData();
+        masterStatusHolder.RBCheckType = 0;
+        if (RBPings >= 100){// ~10min 
+          masterStatusHolder.RBCheckType = 1;
+          RBPings = 0;
+        }
+        if (false){ //TODO messages waiting
+         
+          
+        }
         lastRBCheck = millis();
+        RBPings++;
       }
 
       //Testing IMU and Sensor Downlink String Generator
@@ -1918,7 +1936,7 @@ void loop() {
       }
 
       //Test Slave Communication
-      if (masterStatusHolder.hardwareAvTable[10]) {
+      if (true) { //masterStatusHolder.hardwareAvTable[10]) {
         unsigned long t = millis();
         if (millis() - lastSComAttempt >= SComTime) {
           lastSComAttempt = millis();
@@ -1999,7 +2017,6 @@ void loop() {
       break;
 
     case (DORMANT_CRUISE):
-
       //30 min Dormant Cruise
       if (millis() > cruiseEnd) {
         masterStatusHolder.NextState = INITALIZATION;
@@ -2009,8 +2026,7 @@ void loop() {
       }
       break;
 
-    case (INITALIZATION):
-      {
+    case (INITALIZATION): {
         if (millis() - initEntry < 100) {
           sendSCommand("91,1!");
         }
@@ -2080,7 +2096,7 @@ void loop() {
             lastSComTime = millis(); //Reset Timeout if Com is successful
           }
         }
-        Serial.print("<" + String(digitalRead(DoorSensePin)) + String(masterStatusHolder.LightSense) + ">");
+        Serial.print("<" + String(digitalRead(DoorSensePin)) + "," + String(masterStatusHolder.LightSense) + ">");
         if (cycle % 29 == 0) {
           Serial.println("");
         }
