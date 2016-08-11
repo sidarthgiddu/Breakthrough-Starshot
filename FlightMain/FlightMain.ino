@@ -738,7 +738,7 @@ class masterStatus {
       //      if string length less thatn max number add random symbols until it is max length
 
       for (int i = 109 - OutputString.length(); i <= (109 - OutputString.length() + 1); i++) {
-      OutputString[i] = 2;
+        OutputString[i] = 2;
       }
 
 
@@ -746,7 +746,7 @@ class masterStatus {
       OutputString.getBytes(DLBIN, OutputString.length());
       Serial.print(OutputString);
       for (int i = 0; i < OutputString.length() - 1; i++) {
-      Serial.print("00");
+        Serial.print("00");
         Serial.print(DLBIN[i], BIN);
         Serial.print(" ");
       }
@@ -1917,13 +1917,13 @@ void loop() {
         delay(100);
         RBData();
         masterStatusHolder.RBCheckType = 0;
-        if (RBPings >= 100){// ~10min 
+        if (RBPings >= 100) { // ~10min
           masterStatusHolder.RBCheckType = 1;
           RBPings = 0;
         }
-        if (false){ //TODO messages waiting
-         
-          
+        if (false) { //TODO messages waiting
+
+
         }
         lastRBCheck = millis();
         RBPings++;
@@ -1933,7 +1933,7 @@ void loop() {
       if (millis() - lastDLTime >= DLTime || commandedDL) {
         //Send Data to RockBlock via Serial
         String DLS = masterStatusHolder.toString();
-        String DLSshort = masterStatusHolder.OutputString();
+        //String DLSshort = masterStatusHolder.OutputString();
 
         Serial.println(F(""));
         Serial.println(DLS);
@@ -2094,6 +2094,7 @@ void loop() {
 
     case (DEPLOY_ARMED): { //TODO Broken Door Sensor or Light Sensor Fallback
         SensorDataCollect();
+        //Serial.print("after sensor data collect");
         if (millis() - lastSComAttempt >= 5) {
           lastSComAttempt = millis();
           sendIMUToSlave();
@@ -2112,30 +2113,31 @@ void loop() {
         }
         switch (masterStatusHolder.deploySetting) {
           case (0): //Use Door OR Light
-            if ((masterStatusHolder.hardwareAvTable[8] && digitalRead(DoorSensePin)) ||
-                (masterStatusHolder.hardwareAvTable[9] && masterStatusHolder.LightSense > LightThreshold)) { //wait for door sensor
+            if (((true) && (digitalRead(DoorSensePin))) ||
+                ((true) && (masterStatusHolder.LightSense > LightThreshold))) { //wait for door sensor
               //Door is open
               Serial.print(F("Door Release, Start Image Capture"));
               digitalWrite(DoorTrig, LOW); //deactivate nichrome wire
-              delay(200);
+              delay(200); // cameratimer
               sendSCommand("101,1!"); //Trigger Camera
               masterStatusHolder.NextState = DEPLOY_VERIF;
               deployVEntry = millis();
             }
             break;
           case (1): //Just Use Light
-            if (masterStatusHolder.hardwareAvTable[9] && masterStatusHolder.LightSense > LightThreshold) { //wait for door sensor
+            //if ((masterStatusHolder.hardwareAvTable[9]) && (masterStatusHolder.LightSense > LightThreshold)) { //wait for door sensor
+            if ((true) && (masterStatusHolder.LightSense > LightThreshold)) {
               //Door is open
               Serial.print(F("Door Release, Start Image Capture"));
               digitalWrite(DoorTrig, LOW); //deactivate nichrome wire
-              delay(200);
+              delay(0);
               sendSCommand("101,1!"); //Trigger Camera
               masterStatusHolder.NextState = DEPLOY_VERIF;
               deployVEntry = millis();
             }
             break;
           case (2): //Just Use Door
-            if (masterStatusHolder.hardwareAvTable[8] && digitalRead(DoorSensePin)) { //wait for door sensor
+            if ((true) && digitalRead(DoorSensePin)) { //wait for door sensor
               //Door is open
               Serial.print(F("Door Release, Start Image Capture"));
               digitalWrite(DoorTrig, LOW); //deactivate nichrome wire
@@ -2158,7 +2160,7 @@ void loop() {
       if (cycle % 100 == 0) {
         Serial.println("");
       }
-      delay(1);
+      delay(10);
       //bool SlaveResponse = requestFromSlave(); //Need inputisvalid
       lastAccelTime = millis();
 
