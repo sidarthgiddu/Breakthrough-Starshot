@@ -267,7 +267,7 @@ class slaveStatus
       String r1 = String(resets) + "," + String(Temp) + "," + String(Light) + "," +
                   String(CurXDir) + "," + String(CurYDir) + "," + String(CurZDir) + "," +
                   String(CurXPWM) + "," + String(CurYPWM) + "," + String(CurZPWM) + "," +
-                  String(numPhotos) + "," + "|,,,";
+                  String(numPhotos) + "," + String(CameraStatus) + "," + "|,,,";
       char r2[r1.length()];
       r1.toCharArray(r2, r1.length());
       Wire.write(r2, r1.length());
@@ -280,9 +280,9 @@ class slaveStatus
       TempAcc += getTempDegrees();
       LightAcc += getLightLvl();
       sensRecords++;
-      if (millis() - lastSensAvg > SensAvgTime){
-        Temp = TempAcc/sensRecords; TempAcc = 0;
-        Light = LightAcc/sensRecords; LightAcc = 0;
+      if (millis() - lastSensAvg > SensAvgTime) {
+        Temp = TempAcc / sensRecords; TempAcc = 0;
+        Light = LightAcc / sensRecords; LightAcc = 0;
         sensRecords = 0;
       }
     }
@@ -388,7 +388,7 @@ void runADCS(double* Bvalues, double* gyroData, double Kp, double Kd) {
   double A = 0.532;
 
   Matrix.Copy((double*)gyroData, 3, 1, (double*)OmegaHat);
-  Matrix.Scale((double*)OmegaHat, 3, 1, 1/OmegaMagnitude);
+  Matrix.Scale((double*)OmegaHat, 3, 1, 1 / OmegaMagnitude);
   Matrix.Scale((double*)Bfield, 3, 1, 1 / Bmagnitude);
 
   Matrix.Subtract((double*) gyroData, (double*) Omegacmd, 3, 1, (double*) OmegaError);
@@ -398,44 +398,44 @@ void runADCS(double* Bvalues, double* gyroData, double Kp, double Kd) {
   /////// BfieldError NEW VERSION
   //Matrix.Print((double*)Bfield, 3, 1, "Normalized Bfield");
   double upperbnd = 1.2349, lowerbnd = 0.8098;
-  double theta = sqrt((Bfield[0]-OmegaHat[0])*(Bfield[0]-OmegaHat[0])
-            +(Bfield[1]-OmegaHat[1])*(Bfield[1]-OmegaHat[1]));
-            //Serial.println ("theta is: "+String(theta));
-  double ex = (Bfield[0]-OmegaHat[0])/theta;
-  double ey = (Bfield[1]-OmegaHat[1])/theta;
-  theta = ey/ex;
+  double theta = sqrt((Bfield[0] - OmegaHat[0]) * (Bfield[0] - OmegaHat[0])
+                      + (Bfield[1] - OmegaHat[1]) * (Bfield[1] - OmegaHat[1]));
+  //Serial.println ("theta is: "+String(theta));
+  double ex = (Bfield[0] - OmegaHat[0]) / theta;
+  double ey = (Bfield[1] - OmegaHat[1]) / theta;
+  theta = ey / ex;
 
   // test //////// RBF!!!!!!!!!!!! ======================================== ////////////////////////
   theta = 1; // <==================   REMOVE THIS BEFORE FLIGHT //TODO
   //Serial.println ("theta is: "+ String(theta));
-  
-  if ((theta <= upperbnd) && (theta >= lowerbnd)){
-      BfieldError[0] = Bfield[1]*OmegaHat[2] - Bfield[2]*OmegaHat[1];
-      BfieldError[1] = Bfield[2]*OmegaHat[0] - Bfield[0]*OmegaHat[2];
-      BfieldError[2] = Bfield[0]*OmegaHat[1] - Bfield[1]*OmegaHat[0];
-      //Matrix.Print((double*)BfieldError, 3, 1, "Updated BfieldError");
-      Matrix.Scale((double*)BfieldError, 3, 1, (Kp/A));
-     // Matrix.Print((double*)BfieldError, 3, 1, "Scaled BfieldError");
-    } else { 
+
+  if ((theta <= upperbnd) && (theta >= lowerbnd)) {
+    BfieldError[0] = Bfield[1] * OmegaHat[2] - Bfield[2] * OmegaHat[1];
+    BfieldError[1] = Bfield[2] * OmegaHat[0] - Bfield[0] * OmegaHat[2];
+    BfieldError[2] = Bfield[0] * OmegaHat[1] - Bfield[1] * OmegaHat[0];
+    //Matrix.Print((double*)BfieldError, 3, 1, "Updated BfieldError");
+    Matrix.Scale((double*)BfieldError, 3, 1, (Kp / A));
+    // Matrix.Print((double*)BfieldError, 3, 1, "Scaled BfieldError");
+  } else {
     BfieldError[0] = 0;
     BfieldError[1] = 0;
     BfieldError[2] = 0;
   }
   /////// END of BfieldError NEW VERSION
-  
+
   /////// BfieldError OLD VERSION
   /*
-   * Matrix.Subtract((double*) Bfield, (double*) Bcmd, 3, 1, (double*) BfieldError);
-  //Serial.println ("Step 5 complete");
-  Matrix.Scale((double*)BfieldError, 3, 1, (Kp / A)); // scale error with proportional gain (updates array)
+     Matrix.Subtract((double*) Bfield, (double*) Bcmd, 3, 1, (double*) BfieldError);
+    //Serial.println ("Step 5 complete");
+    Matrix.Scale((double*)BfieldError, 3, 1, (Kp / A)); // scale error with proportional gain (updates array)
   */
   /////// END of BfieldError OLD VERSION
-  
+
   //Serial.println ("Step 7 complete");
-  
+
   Matrix.Add((double*)BfieldError, (double*)OmegaError, 3, 1, (double*) ErrorSum);
   //Serial.println ("Step 9 complete"); delay(50);
-  
+
   Matrix.Scale((double*)OmegaError, 3, 1, (Kd / A)); // scale error with derivative gain (updates array)
   //Serial.println ("Step 8 complete");
 
@@ -803,7 +803,7 @@ void requestEvent() {
           for (int i = 0; i < s.length(); i++) {
             Wire.write(s.charAt(i));
           }
-          if(StatusHolder.imageR.photosize == 0){
+          if (StatusHolder.imageR.photosize == 0) {
             StatusHolder.ITStatus = 0;
           }
         } else {
