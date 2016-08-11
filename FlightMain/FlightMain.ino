@@ -1002,8 +1002,8 @@ void popCommands() {
       //Supported Commands
       switch (currentCommand[0]) {
         case (91): //Arm Deployment
-          masterStatusHolder.NextState = DEPLOY_ARMED;
           DA_Initialize = true;
+          masterStatusHolder.NextState = DEPLOY_ARMED;
         case (92): //Set Deploy Timeout (seconds)
           if (currentCommand[1] >= 2000) {
             deployTimeOut = (currentCommand[1]) * 1000;
@@ -2116,6 +2116,7 @@ void loop() {
           Serial.println("");
         }
         if (DA_Initialize) {
+        //if (true){
           digitalWrite(DoorTrig, HIGH); //Activate Nichrome
           DA_Initialize = false;
         }

@@ -5,6 +5,7 @@
 #include <SD.h>
 
 ////Constant Initialization
+bool camStatus = false;
 int MasterFaultTime = 5 * 60 * 1000;
 int lastMasterCom = 0;
 uint8_t resets = 0;
@@ -267,7 +268,7 @@ class slaveStatus
       String r1 = String(resets) + "," + String(Temp) + "," + String(Light) + "," +
                   String(CurXDir) + "," + String(CurYDir) + "," + String(CurZDir) + "," +
                   String(CurXPWM) + "," + String(CurYPWM) + "," + String(CurZPWM) + "," +
-                  String(numPhotos) + "," + String(CameraStatus) + "," + "|,,,";
+                  String(numPhotos) + "," + String(camStatus) + "," + "|,,,";
       char r2[r1.length()];
       r1.toCharArray(r2, r1.length());
       Wire.write(r2, r1.length());
@@ -921,7 +922,6 @@ void readSerialAdd2Buffer() {
   }
 }
 
-bool camStatus = false;
 String takePic(int ImageSize) {
   // Try to locate the camera
   if (!camStatus) {
