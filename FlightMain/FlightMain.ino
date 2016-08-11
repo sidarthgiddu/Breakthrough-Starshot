@@ -113,6 +113,7 @@ const int DoorMagEnable = 11; //Allow Door Magnetorquer to work
 //Image Downlink Test
 #define chipSelect 4
 #define DLSize 320
+unsigned long lastCamTime = 0;
 
 bool DA_Initialize;
 
@@ -541,6 +542,7 @@ class masterStatus {
     //Slave State Variables
     int numPhotos; //Photos Stored in Slave SD Card
     int Resets; //Number of Times Slave has been Reset
+    bool CameraStatus;
 
     //Deployment Variables
     int missionStatus; //0=incomplete, 1=success, 2=failure
@@ -738,7 +740,7 @@ class masterStatus {
       //      if string length less thatn max number add random symbols until it is max length
 
       for (int i = 109 - OutputString.length(); i <= (109 - OutputString.length() + 1); i++) {
-      OutputString[i] = 2;
+        OutputString[i] = 2;
       }
 
 
@@ -746,7 +748,7 @@ class masterStatus {
       OutputString.getBytes(DLBIN, OutputString.length());
       Serial.print(OutputString);
       for (int i = 0; i < OutputString.length() - 1; i++) {
-      Serial.print("00");
+        Serial.print("00");
         Serial.print(DLBIN[i], BIN);
         Serial.print(" ");
       }
@@ -1300,8 +1302,8 @@ bool requestFromSlave() {
           if (masterStatusHolder.State != DEPLOY_ARMED) {
             Serial.println("SSVs Updated: " + res);
           }
-          int data[10];
-          sectionReadToValue(res, data, 10);
+          int data[11];
+          sectionReadToValue(res, data, 11);
           masterStatusHolder.MResets = data[0];
           masterStatusHolder.AnalogTemp = data[1];
           masterStatusHolder.LightSense = data[2];
@@ -1312,7 +1314,7 @@ bool requestFromSlave() {
           masterStatusHolder.CurYPWM = data[7];
           masterStatusHolder.CurZPWM = data[8];
           masterStatusHolder.numPhotos = data[9];
-
+          masterStatusHolder.CameraStatus = data[10];
           break;
         }
     }
@@ -1917,16 +1919,22 @@ void loop() {
         delay(100);
         RBData();
         masterStatusHolder.RBCheckType = 0;
-        if (RBPings >= 100){// ~10min 
+        if (RBPings >= 100) { // ~10min
           masterStatusHolder.RBCheckType = 1;
           RBPings = 0;
         }
-        if (false){ //TODO messages waiting
-         
-          
+        if (false) { //TODO messages waiting
+
+
         }
         lastRBCheck = millis();
         RBPings++;
+      }
+
+      //Just Print Camera Status for Testing
+      if (millis() - lastCamTime > 4000){
+        Serial.print("<C"+String(masterStatusHolder.CameraStatus)+">");
+        lastCamTime = millis();
       }
 
       //Testing IMU and Sensor Downlink String Generator
