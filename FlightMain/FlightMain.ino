@@ -638,7 +638,7 @@ class masterStatus {
     void updateSensors() {
       //Update Internal Sensor Variables
       if (hardwareAvTable[0]) {
-        //imu.read(); //Comment out if not working
+        imu.read(); //Comment out if not working
         floatTuple M = getMagData(imu);
         floatTuple g = getGyroData(imu);
         GyroAcc[0] += g.x; GyroAcc[1] += g.y; GyroAcc[2] += g.z;
