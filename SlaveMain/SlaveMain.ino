@@ -390,7 +390,7 @@ void runADCS(double* Bvalues, double* gyroData, double Kp, double Kd) {
   double Bmagnitude = sqrt(Bvalues[0] * Bvalues[0] + Bvalues[1] * Bvalues[1] + Bvalues[2] * Bvalues[2]);
   double OmegaMagnitude = sqrt(gyroData[0] * gyroData[0] + gyroData[1] * gyroData[1] + gyroData[2] * gyroData[2]);
   double Bcmd[3] = {0, 0, 1};
-  double A = 0.532;
+  double A = 0.290;
 
   Matrix.Copy((double*)gyroData, 3, 1, (double*)OmegaHat);
   Matrix.Scale((double*)OmegaHat, 3, 1, 1 / OmegaMagnitude);
@@ -411,17 +411,18 @@ void runADCS(double* Bvalues, double* gyroData, double Kp, double Kd) {
   theta = ey / ex;
   /*
   // test //////// RBF!!!!!!!!!!!! ======================================== ////////////////////////
-  theta = 1; // <==================   REMOVE THIS BEFORE FLIGHT //TODO
+  /*
+  //theta = 1; // <==================   REMOVE THIS BEFORE FLIGHT //TODO
   //Serial.println ("theta is: "+ String(theta));
-
-  if ((theta <= upperbnd) && (theta >= lowerbnd)) {
-    BfieldError[0] = Bfield[1] * OmegaHat[2] - Bfield[2] * OmegaHat[1];
-    BfieldError[1] = Bfield[2] * OmegaHat[0] - Bfield[0] * OmegaHat[2];
-    BfieldError[2] = Bfield[0] * OmegaHat[1] - Bfield[1] * OmegaHat[0];
-    //Matrix.Print((double*)BfieldError, 3, 1, "Updated BfieldError");
-    Matrix.Scale((double*)BfieldError, 3, 1, (Kp / A));
-    // Matrix.Print((double*)BfieldError, 3, 1, "Scaled BfieldError");
-  } else {
+  
+  if ((theta <= upperbnd) && (theta >= lowerbnd)){
+      BfieldError[0] = Bfield[1]*OmegaHat[2] - Bfield[2]*OmegaHat[1];
+      BfieldError[1] = Bfield[2]*OmegaHat[0] - Bfield[0]*OmegaHat[2];
+      BfieldError[2] = Bfield[0]*OmegaHat[1] - Bfield[1]*OmegaHat[0];
+      Matrix.Print((double*)BfieldError, 3, 1, "Updated BfieldError");
+      Matrix.Scale((double*)BfieldError, 3, 1, (Kp/A));
+      Matrix.Print((double*)BfieldError, 3, 1, "Scaled BfieldError");
+    } else { 
     BfieldError[0] = 0;
     BfieldError[1] = 0;
     BfieldError[2] = 0;
@@ -433,7 +434,7 @@ void runADCS(double* Bvalues, double* gyroData, double Kp, double Kd) {
      Matrix.Subtract((double*) Bfield, (double*) Bcmd, 3, 1, (double*) BfieldError);
     //Serial.println ("Step 5 complete");
     Matrix.Scale((double*)BfieldError, 3, 1, (Kp / A)); // scale error with proportional gain (updates array)
-  
+ 
   /////// END of BfieldError OLD VERSION
 
   //Serial.println ("Step 7 complete");
@@ -467,7 +468,7 @@ void runADCS(double* Bvalues, double* gyroData, double Kp, double Kd) {
 }
 
 void outputPWM(double* I, int length) {
-  float Imax = 0.2;
+  float Imax = 0.92;
   //String I1 = I[0].toString();
   //String I2 = I[1].toString();
   //String I3 = I[2].toString();
@@ -484,11 +485,35 @@ void outputPWM(double* I, int length) {
 
   // CREATE PWM OUT SIGNAL
 
-  //StatusHolder.pwmWrite(I[0] / Imaxf * 255,I[1] / Imaxf * 255,I[2] / Imaxf * 255);
+  //StatusHolder.pwmWrite(I[0] / Imax * 255,I[1] / Imax * 255,I[2] / Imax * 255);
   /// ...
-  //analogWrite(CX_PWM, I[0] / Imaxf * 255);
-  //analogWrite(CY_PWM, I[1] / Imaxf * 255);
-  //analogWrite(CZ_PWM, I[2] / Imaxf * 255);
+  analogWrite(CX_PWM, I[0] / Imax * 255);
+  analogWrite(CY_PWM, I[1] / Imax * 255); 
+  analogWrite(CZ_PWM, I[2] / Imax * 255);
+
+    if (sgn(I[0]) >= 0) {
+      digitalWrite(CX1, HIGH);
+      digitalWrite(CX2, LOW);
+    } else {
+      digitalWrite(CX1, LOW);
+      digitalWrite(CX2, HIGH);
+    }
+    if (sgn(I[1]) >= 0) {
+      digitalWrite(CY1, HIGH);
+      digitalWrite(CY2, LOW);
+    } else {
+      digitalWrite(CY1, LOW);
+      digitalWrite(CY2, HIGH);
+    }
+
+    if (sgn(I[2]) >= 0) {
+      digitalWrite(CZ1, HIGH);
+      digitalWrite(CZ2, LOW);
+    } else {
+      digitalWrite(CZ1, LOW);
+      digitalWrite(CZ2, HIGH);
+    }
+  
 
   floatTuple PWMvaluesForTorquers = floatTuple(I[0] / Imax * 255, I[1] / Imax * 255, I[2] / Imax * 255);
   floatTuple PWMdirectionsForTorquers = floatTuple(sgn(I[0]), sgn(I[1]), sgn(I[2]));
@@ -1134,15 +1159,14 @@ void loop() {
   //StatusHolder.ADCS_Active = false;
   //Test ADCS
   if (StatusHolder.ADCS_Active) {
-    
     if (millis() - lastADCSTime >= 2000) {
       if (millis() - lastADCSTime >= 2100) {
         //Serial.println("happy");
         //runADCS(mData, gData, Kp, Kd);
         Serial.println();
-        Serial.println(StatusHolder.mag[0]);
-        Serial.println(StatusHolder.mag[1]);
-        Serial.println(StatusHolder.mag[2]);
+        //Serial.println(StatusHolder.mag[0]);
+        //Serial.println(StatusHolder.mag[1]);
+        //Serial.println(StatusHolder.mag[2]);
         
         runADCS(StatusHolder.mag, StatusHolder.gyro, Kp, Kd); //placeholders
         //Serial.println("still happy");
@@ -1153,9 +1177,9 @@ void loop() {
         disableT = true;
       } else {
         //torquers off
-        //analogWrite(CX_PWM, 0);
-        //analogWrite(CY_PWM, 0);
-        //analogWrite(CZ_PWM, 0);
+        analogWrite(CX_PWM, 0);
+        analogWrite(CY_PWM, 0);
+        analogWrite(CZ_PWM, 0);
         if (disableT) {
           floatTuple PWMvaluesForTorquers = floatTuple(0, 0, 0);
           floatTuple PWMdirectionsForTorquers = floatTuple(0, 0, 0);
