@@ -479,11 +479,12 @@ void outputPWM(double* I, int length) {
 
   // CREATE PWM OUT SIGNAL
 
-  //StatusHolder.pwmWrite(I[0] / Imaxf * 255,I[1] / Imaxf * 255,I[2] / Imaxf * 255);
+  //StatusHolder.pwmWrite(I[0] / Imax * 255,I[1] / Imax * 255,I[2] / Imax * 255);
   /// ...
-  //analogWrite(CX_PWM, I[0] / Imaxf * 255);
-  //analogWrite(CY_PWM, I[1] / Imaxf * 255);
-  //analogWrite(CZ_PWM, I[2] / Imaxf * 255);
+  //analogWrite(CX_PWM, I[0] / Imax * 255);
+  //analogWrite(CY_PWM, I[1] / Imax * 255);
+  //analogWrite(CZ_PWM, I[2] / Imax * 255);
+  
 
   floatTuple PWMvaluesForTorquers = floatTuple(I[0] / Imax * 255, I[1] / Imax * 255, I[2] / Imax * 255);
   floatTuple PWMdirectionsForTorquers = floatTuple(sgn(I[0]), sgn(I[1]), sgn(I[2]));
