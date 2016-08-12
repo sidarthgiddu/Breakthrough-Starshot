@@ -5,7 +5,7 @@
 #include <SD.h>
 
 ////Constant Initialization
-bool TestReset = false;
+bool camStatus = false;
 int MasterFaultTime = 5 * 60 * 1000;
 int lastMasterCom = 0;
 uint8_t resets = 0;
@@ -268,7 +268,7 @@ class slaveStatus
       String r1 = String(resets) + "," + String(Temp) + "," + String(Light) + "," +
                   String(CurXDir) + "," + String(CurYDir) + "," + String(CurZDir) + "," +
                   String(CurXPWM) + "," + String(CurYPWM) + "," + String(CurZPWM) + "," +
-                  String(numPhotos) + "," + "|,,,";
+                  String(numPhotos) + "," + String(camStatus) + "," + "|,,,";
       char r2[r1.length()];
       r1.toCharArray(r2, r1.length());
       Wire.write(r2, r1.length());
@@ -281,9 +281,9 @@ class slaveStatus
       TempAcc += getTempDegrees();
       LightAcc += getLightLvl();
       sensRecords++;
-      if (millis() - lastSensAvg > SensAvgTime){
-        Temp = TempAcc/sensRecords; TempAcc = 0;
-        Light = LightAcc/sensRecords; LightAcc = 0;
+      if (millis() - lastSensAvg > SensAvgTime) {
+        Temp = TempAcc / sensRecords; TempAcc = 0;
+        Light = LightAcc / sensRecords; LightAcc = 0;
         sensRecords = 0;
       }
     }
@@ -389,7 +389,7 @@ void runADCS(double* Bvalues, double* gyroData, double Kp, double Kd) {
   double A = 0.290;
 
   Matrix.Copy((double*)gyroData, 3, 1, (double*)OmegaHat);
-  Matrix.Scale((double*)OmegaHat, 3, 1, 1/OmegaMagnitude);
+  Matrix.Scale((double*)OmegaHat, 3, 1, 1 / OmegaMagnitude);
   Matrix.Scale((double*)Bfield, 3, 1, 1 / Bmagnitude);
 
   Matrix.Subtract((double*) gyroData, (double*) Omegacmd, 3, 1, (double*) OmegaError);
@@ -397,14 +397,14 @@ void runADCS(double* Bvalues, double* gyroData, double Kp, double Kd) {
   //////////////Serial.println(freeRam ());
 
   /////// BfieldError NEW VERSION
-  Matrix.Print((double*)Bfield, 3, 1, "Normalized Bfield");
+  //Matrix.Print((double*)Bfield, 3, 1, "Normalized Bfield");
   double upperbnd = 1.2349, lowerbnd = 0.8098;
-  double theta = sqrt((Bfield[0]-OmegaHat[0])*(Bfield[0]-OmegaHat[0])
-            +(Bfield[1]-OmegaHat[1])*(Bfield[1]-OmegaHat[1]));
-            Serial.println ("theta is: "+String(theta));
-  double ex = (Bfield[0]-OmegaHat[0])/theta;
-  double ey = (Bfield[1]-OmegaHat[1])/theta;
-  theta = ey/ex;
+  double theta = sqrt((Bfield[0] - OmegaHat[0]) * (Bfield[0] - OmegaHat[0])
+                      + (Bfield[1] - OmegaHat[1]) * (Bfield[1] - OmegaHat[1]));
+  //Serial.println ("theta is: "+String(theta));
+  double ex = (Bfield[0] - OmegaHat[0]) / theta;
+  double ey = (Bfield[1] - OmegaHat[1]) / theta;
+  theta = ey / ex;
 
   // test //////// RBF!!!!!!!!!!!! ======================================== ////////////////////////
   /*
@@ -425,20 +425,19 @@ void runADCS(double* Bvalues, double* gyroData, double Kp, double Kd) {
   }
   */
   /////// END of BfieldError NEW VERSION
-  
+
   /////// BfieldError OLD VERSION
-  
-  Matrix.Subtract((double*) Bfield, (double*) Bcmd, 3, 1, (double*) BfieldError);
+ Matrix.Subtract((double*) Bfield, (double*) Bcmd, 3, 1, (double*) BfieldError);
   //Serial.println ("Step 5 complete");
   Matrix.Scale((double*)BfieldError, 3, 1, (Kp / A)); // scale error with proportional gain (updates array)
-  
+
   /////// END of BfieldError OLD VERSION
-  
+
   //Serial.println ("Step 7 complete");
-  
+
   Matrix.Add((double*)BfieldError, (double*)OmegaError, 3, 1, (double*) ErrorSum);
   //Serial.println ("Step 9 complete"); delay(50);
-  
+
   Matrix.Scale((double*)OmegaError, 3, 1, (Kd / A)); // scale error with derivative gain (updates array)
   //Serial.println ("Step 8 complete");
 
@@ -569,7 +568,7 @@ void clearSDCard(int i) {
     } else {
       notExists++;
     }
-    if (notExists > 10) {
+    if (notExists > 3) {
       return;
     }
   }
@@ -830,6 +829,9 @@ void requestEvent() {
           for (int i = 0; i < s.length(); i++) {
             Wire.write(s.charAt(i));
           }
+          if (StatusHolder.imageR.photosize == 0) {
+            StatusHolder.ITStatus = 0;
+          }
         } else {
           //Card Not Working
           Serial.println("SD Card Fail");
@@ -945,7 +947,6 @@ void readSerialAdd2Buffer() {
   }
 }
 
-bool camStatus = false;
 String takePic(int ImageSize) {
   // Try to locate the camera
   if (!camStatus) {
@@ -967,7 +968,6 @@ String takePic(int ImageSize) {
   char filename[9];
   strcpy(filename, "A0000.JPG");
   for (int i = 0; i < 9999; i++) {
-    Serial.print(i);
     filename[1] = '0' + i / 1000;
     filename[2] = '0' + i % 1000 / 100;
     filename[3] = '0' + i % 1000 % 100 / 10;

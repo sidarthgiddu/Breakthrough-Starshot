@@ -16,9 +16,8 @@
 #define DEPLOY_DOWN_LK 8
 #define LOW_POWER      9
 #define SAFE_MODE     10
-const int IMAGE_REQUEST = 888;
+#define IMAGE_REQUEST 11
 
-bool ImuWireConnected = true;
 bool WireConnected = true;
 bool LED_NOT_DOOR = false;
 
@@ -43,37 +42,36 @@ unsigned long forceExitEclipseTime = 50 * 60 * 1000;
 unsigned long forceLPEclipseTime = 180 * 60 * 1000;
 unsigned long lastAccelTime;
 
-int LightThreshold = 100; //0-1023?
-float LV_Threshold = 3.2;
-float HV_Threshold = 3.8;
-float EclipseAmp_Threshold = 0.01;
+int LightThreshold = 80; //0-100
+float LV_Threshold = 3.38; //Volts
+float HV_Threshold = 3.80; //Volts
+float EclipseAmp_Threshold = 0.01; //10mA
 int LT_Threshold = -10; //C
 int HT_Threshold = 60; //C
+float gyroThresholdX = 3; //dps
+float gyroThresholdY = 3; //dps
+float gyroThresholdZ = 3; //dps
 
 //RockBlock Test
 unsigned long lastRBCheck = 0;
 long RBCheckTime = 6000;
+unsigned int RBPings = 0;
+unsigned long DLTime = 6137;
+unsigned long lastDLTime = 0;
+bool RBPingOut = false;
 
 //IMU and Sensor Test
-bool SensorFetch = false;
-bool imuWorking = true;
-bool masterUseIMU = true;
 Adafruit_LSM9DS0 imu = Adafruit_LSM9DS0();
 int imuSensorDwell = 100; //Averaging Time Non-BLOCKING!
 unsigned long lastIMUTime = 0;
 int IMUrecords = 0;
-float gyroThresholdY = 3;
-float gyroThresholdX = 3;
 
 //Slave Communication Test
-bool slaveWorking = true;
 long recentSlaveCom = 0;
-bool TestSCom = true;
 long lastSComTime = 0;
 long lastSComAttempt = 0;
 int SComTime = 2000;
 unsigned long SlaveResetTimeOut = 30 * 1000;
-int slaveDataSize = 100;
 
 //ADCS Test
 unsigned long LastSpinCheckT = 0;
@@ -85,9 +83,6 @@ int popTime = 4000;
 unsigned long lastPopTime = 0;
 
 //RockBlock Test
-//IridiumSBD iSBD = IridiumSBD(Serial, 22); //RBSleep Pin
-unsigned long SBDCallBackStartTime = 0;
-unsigned long RBForcedTimeout = 30 * 1000;
 
 //Commanded Action Flags
 bool commandedSC = false;
@@ -115,27 +110,12 @@ const int SolarZMinusPin = 9; //Solar Current Z-
 const int SlaveReset = 10; //Slave Fault Handing (via Hard Reset)
 const int DoorMagEnable = 11; //Allow Door Magnetorquer to work
 
-//Downlink Test Placeholders
-long DLTime = 6137;
-long lastDLTime = 0;
-float placeHolderBattery = 0.3;
-float placeHolderSolarXPlus = .1;
-float placeHolderSolarXMinus = .2;
-float placeHolderSolarYPlus = .3;
-float placeHolderSolarYMinus = .4;
-float placeHolderSolarZPlus = .5;
-float placeHolderSolarZMinus = .6;
-int placeHolderDoorSense = 1;
-float placeHolderLightSense = 5.5;
-float placeHolderAnalogTemp = 21.0;
-int placeHoldernumPhotos = 10;
-
-//Deployment Test
-bool DA_Initialize = true;
-
 //Image Downlink Test
 #define chipSelect 4
 #define DLSize 320
+unsigned long lastCamTime = 0;
+
+bool DA_Initialize;
 
 class floatTuple
 {
@@ -165,13 +145,6 @@ float fmap(float x, float in_min, float in_max, float out_min, float out_max)
 void printArray(uint8_t * arr, int s) {
   if (s) {
     for (int i = 0; i < s; i++) {
-      //    for (int j = 0; j < 8; j++) {
-      //      if (arr[i] < pow(2, j))
-      //        Serial.print(B0);
-      //    }
-      //      if (i % DLSize == 0) {
-      //        Serial.println(" ");
-      //      }
       print_binary(arr[i], 8);
       Serial.print(" ");
     }
@@ -264,7 +237,6 @@ class RAMImage {
 
     void store(uint8_t * data, int dataSize) {
       //Stores an entire Image, splitting it into segments
-      //Filename = "Transfered Image";
       int dsize = dataSize;
       int index = 0;
       while (true) {
@@ -364,7 +336,8 @@ class RAMImage {
     }
 
     void store(uint8_t * data, int dataSize, int index) {
-      //Stores a segment in the RAMImage
+      //Stores array <data> with length <dataSize> in segment
+      // <index> in the RAMImage
       int bytes = min(DLSize, dataSize);
       if (index > finalIndex) {
         finalIndex = index;
@@ -443,6 +416,7 @@ class RAMImage {
       }
     }
     uint8_t * get(int index) {
+      //Retrives segment number <index>
       switch (index) {
         case 0: return a0;
         case 1: return a1;
@@ -471,6 +445,7 @@ class RAMImage {
 //IMU Code
 
 floatTuple getMagData(Adafruit_LSM9DS0 imu) {
+  //Returns vector of magnetometer data from Adafruit_LSM9DS0 <imu>
   floatTuple mData = floatTuple((int)imu.magData.x * (2.0 / 32768),
                                 (int)imu.magData.y * (2.0 / 32768),
                                 (int)imu.magData.z * (2.0 / 32768));
@@ -478,6 +453,7 @@ floatTuple getMagData(Adafruit_LSM9DS0 imu) {
 }
 
 floatTuple getGyroData(Adafruit_LSM9DS0 imu) {
+  //Returns vector of gyro data from Adafruit_LSM9DS0 <imu>
   floatTuple gData = floatTuple((int)imu.gyroData.x * (245.0 / 32768),
                                 (int)imu.gyroData.y * (245.0 / 32768),
                                 (int)imu.gyroData.z * (245.0 / 32768));
@@ -485,6 +461,7 @@ floatTuple getGyroData(Adafruit_LSM9DS0 imu) {
 }
 
 int getImuTempData(Adafruit_LSM9DS0 imu) {
+  //Returns temp data from Adafruit_LSM9DS0 <imu>
   return (int)imu.temperature ;// * (1.0 / 8.0); // 8 per Degree C
 }
 
@@ -494,6 +471,7 @@ int getImuTempData(Adafruit_LSM9DS0 imu) {
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 class commandBuffer {
+    //Class which holds a stack of currently waiting commands which have not been processed
   public:
     int commandStack[200][2];
     int openSpot;
@@ -502,6 +480,7 @@ class commandBuffer {
       openSpot = 0;
     }
     void print() {
+      //Serial formatting and Serial output
       int i = 0;
       Serial.print(F("cBuf = ["));
       int endT = millis() + manualTimeout;
@@ -521,54 +500,61 @@ class commandBuffer {
 commandBuffer cBuf;
 
 class masterStatus {
+    //Class to hold entire State of Spacecraft Operation except timers
   public:
-    //Adafruit_LSM9DS0 imu;
 
     RAMImage imageR;
     int currentSegment;
     int RequestingImageStatus;
 
-    bool hardwareAvTable[10];//Hardware Avaliability Table
-    //[Imu, SX+,SX-,SY+, SY-, SZ+, SZ-,Temp,DoorSense,LightSense]
+    bool hardwareAvTable[11];//Hardware Avaliability Table
+    //[Imu, SX+,SX-,SY+, SY-, SZ+, SZ-,Temp,DoorSense,LightSense,Slave]
     //Fix PopCommand Av Swap Limit if changed
 
+    // change final string to binary. get bytes. find upper and lower limits. round floats and set value for maxes (like MAX)
     int State;
     int NextState;
-    float Mag[3];
-    float Gyro[3];
-    float Accel[3];
-    float MagAcc[3];
-    float GyroAcc[3];
-    float AccelAcc[3];
-    int TempAcc;
-    int ImuTemp;
-    float Battery;
-    float BatteryAcc;
-    float SolarXPlus;
-    float SolarXMinus;
-    float SolarYPlus;
-    float SolarYMinus;
-    float SolarZPlus;
-    float SolarZMinus;
-    int DoorSense;
-    float LightSense;
-    float AnalogTemp;
-    int numPhotos;
-    int IMUWorking;
-    int SlaveWorking;
-    int Resets;
-    bool PayloadDeployed;
-    int missionStatus; //0=incomplete, 1=success, 2=failure
-
-
-    float * IMUData[3];
-    float * LIGHTData;
-    float * AccelData[3];
-    int dataIndex;
-    int accelIndex;
-
     bool ADCS_Active;
-    int MResets;
+
+    //IMU Data Variables
+    float Mag[3]; // max 0.65 gauss min -0.65 gauss
+    float Gyro[3];  // max 245 dps min -245 dps
+    float Accel[3]; //?
+    float MagAcc[3]; //Accumulator
+    float GyroAcc[3]; //Accumulator
+    float AccelAcc[3]; //Accumulator
+    int TempAcc; // max 70C min -50C
+    int ImuTemp; // max ? min ? //TODO
+
+    //Sensor Variables
+    float Battery; // max 4.2V min 2.75V
+    float BatteryAcc; //Accumulator
+    float SolarXPlus; //Current in Amps
+    float SolarXMinus; //Current in Amps
+    float SolarYPlus; //Current in Amps
+    float SolarYMinus; //Current in Amps
+    float SolarZPlus; //Current in Amps
+    float SolarZMinus; //Current in Amps
+    int DoorSense; //0 = Door Closed, 1 = Door Open
+    float LightSense; //Sent From Slave
+    float AnalogTemp; //Sent From Slave
+
+    //Slave State Variables
+    int numPhotos; //Photos Stored in Slave SD Card
+    int Resets; //Number of Times Slave has been Reset
+    bool CameraStatus;
+
+    //Deployment Variables
+    int missionStatus; //0=incomplete, 1=success, 2=failure
+    int deploySetting; //0=DoorSensor OR Light, 1 = Just Light, 2 = Just DoorSensor
+    float * IMUData[3]; //TODO
+    float * LIGHTData; //TODO
+    float * AccelData[3]; //TODO
+    int dataIndex; //TODO
+    int accelIndex; //TODO
+
+    //ADCS State Variables
+    int MResets; //Number of Times Master has been reset
     int CurXDir; //-1 or 1 for Coil Current Direction
     int CurXPWM; // 0 to 255 for Coil Current Level
     int CurYDir; //-1 or 1 for Coil Current Direction
@@ -576,9 +562,9 @@ class masterStatus {
     int CurZDir; //-1 or 1 for Coil Current Direction
     int CurZPWM; // 0 to 255 for Coil Current Level
 
-    //ROCKBLOCKVARIABLES
-
-    bool AttemptingLink;
+    //ROCKBLOCK Message Variables
+    bool AttemptingLink; //True if waiting for SBDIX to return
+    int RBCheckType; //State of Outgoing Communication with RockBlock. 0=ping, 1=Send SBDIX, 2=Fetch Incomming Command
     int MOStatus;
     int MOMSN;
     int MTStatus;
@@ -586,54 +572,40 @@ class masterStatus {
     int MTLength;
     int MTQueued;
     String SBDRT;
-    int LastMsgType;
-    int LastSMsgType
-    //LastMsgType values:
-    //0 = inval
-    //1 = ok
-    //2 = ring
-    //3 = error
-    //4 = ready
+    int LastMsgType; //0 = inval, 1 = ok, 2 = ring, 3 = error, 4 = ready
+    int LastSMsgType; //Only Update on NON EMPTY reads from RB: 0 = inval, 1 = ok, 2 = ring, 3 = error, 4 = ready
 
 
-    masterStatus(int S = NORMAL_OPS, floatTuple g = floatTuple(0, 0, 0) , floatTuple M = floatTuple(0, 0, 0), int IT = 0,
-                 float B = 0, float SolarXP = 0, float SolarXM = 0, float SolarYP = 0, float SolarYM = 0,
-                 float SolarZP = 0, float SolarZM = 0, int DS = 0, float LS = 0,
-                 float AT = 0, int nP = 0, bool IMUW = true, bool SW = true, int R = 0, int MR = 0,
-                 int XD = 0, int XP = 0, int YD = 0, int YP = 0, int ZD = 0, int ZP = 0, bool ADCS = false,
-                 bool pd = false, int mS = 0 ) {
-
-      State = S;
+    masterStatus() {
+      //Constructor
+      State = 4; //Normal Ops //TODO
       NextState = State;
-      PayloadDeployed = pd;
-      //imu = Adafruit_LSM9DS0(); //imu.begin();
+      deploySetting = 0;
 
       bool hardwareAvTable[10] = {true}; // Hardware Avaliability Table
       //[Imu, SX+,SX-,SY+, SY-, SZ+, SZ-,Temp,DoorSense,LightSense]
 
-      Gyro[0] = g.x; Gyro[1] = g.y; Gyro[2] = g.z;
-      Mag[0] = M.x; Mag[1] = M.y; Mag[2] = M.z;
+      Gyro[3] = {0};
+      Mag[3] = {0};
       GyroAcc[3] = {0};
       MagAcc[3] = {0};
       TempAcc = 0;
-      ImuTemp = IT;
-      Battery = B;
+      ImuTemp = 0;
+      Battery = 3.8;
       BatteryAcc = 0;
-      SolarXPlus = SolarXP;
-      SolarXMinus = SolarXM;
-      SolarYPlus = SolarYP;
-      SolarYMinus = SolarYM;
-      SolarZPlus = SolarZP;
-      SolarZMinus = SolarZM;
-      DoorSense = DS;
-      LightSense = LS;
-      AnalogTemp = AT;
-      numPhotos = nP;
+      SolarXPlus = 0;
+      SolarXMinus = 0;
+      SolarYPlus = 0;
+      SolarYMinus = 0;
+      SolarZPlus = 0;
+      SolarZMinus = 0;
+      DoorSense = 0;
+      LightSense = 0;
+      AnalogTemp = 0;
+      numPhotos = 0;
 
-      IMUWorking = IMUW;
-      SlaveWorking = SW;
-      Resets = R;
-      missionStatus = mS;
+      Resets = 0;
+      missionStatus = 0;
 
 
       imageR = RAMImage();
@@ -641,6 +613,7 @@ class masterStatus {
       RequestingImageStatus = 0;
 
       AttemptingLink = false;
+      RBCheckType = 0;
       MOStatus = 0;
       MOMSN = 0;
       MTStatus = 0;
@@ -650,14 +623,14 @@ class masterStatus {
       LastMsgType = 0;
       LastSMsgType = 0;
 
-      ADCS_Active = ADCS;
-      MResets = MR;
-      CurXDir = XD;
-      CurXPWM = XP;
-      CurYDir = YD;
-      CurYPWM = YP;
-      CurZDir = ZD;
-      CurZPWM = ZP;
+      ADCS_Active = 1;
+      MResets = 0;
+      CurXDir = 0;
+      CurXPWM = 0;
+      CurYDir = 0;
+      CurYPWM = 0;
+      CurZDir = 0;
+      CurZPWM = 0;
 
       IMUData[3][360] = {0};
       LIGHTData[360] = {0};
@@ -665,14 +638,14 @@ class masterStatus {
       accelIndex = 0;
     }
     void updateSensors() {
-      if (imuWorking) {
-        imu.read();
+      //Update Internal Sensor Variables
+      if (hardwareAvTable[0]) {
+        imu.read(); //Comment out if not working
         floatTuple M = getMagData(imu);
         floatTuple g = getGyroData(imu);
         GyroAcc[0] += g.x; GyroAcc[1] += g.y; GyroAcc[2] += g.z;
         MagAcc[0] += M.x; MagAcc[1] += M.y; MagAcc[2] += M.z;
         TempAcc += getImuTempData(imu);
-        //AccelAcc
       }
       SolarXPlus = getCurrentAmp(1); //X+
       SolarXMinus = getCurrentAmp(2); //X-
@@ -683,22 +656,12 @@ class masterStatus {
 
       //Serial.println(analogRead(BatteryPin));
       BatteryAcc += 2 * fmap((float)analogRead(BatteryPin), 0.0, 1023.0, 0.0, 3.3); //TODO x2??
+      //Serial.println(BatteryAcc);
       DoorSense = digitalRead(DoorSensePin);
     }
 
-    //    void configureSensor()
-    //    {
-    //      if (ImuWireConnected) {
-    //        //set magnetometer range to +-2 gauss
-    //        imu.setupMag(imu.LSM9DS0_MAGGAIN_2GAUSS);
-    //        //set gyro range to +-245 degrees per second
-    //        imu.setupGyro(imu.LSM9DS0_GYROSCALE_245DPS);
-    //        //imu.setupAccel(imu.LSM9DS0_ACCEL_MG_LSB_2G);
-    //      }
-    //    }
-
     String toString() {
-      //Produces JSON Output in ASCII  for Downlink
+      //Produces JSON Output in ASCII for Printing and Downlink
       String output = "";
       output += "{";
       output += "S:" + String(State) + ",";
@@ -714,8 +677,8 @@ class masterStatus {
       output += "DS:" + String(DoorSense) + ",";
       output += "LS:" + String(LightSense) + ",";
       output += "nP:" + String(numPhotos) + ",";
-      output += "IW:" + String(IMUWorking) + ",";
-      output += "SW:" + String(SlaveWorking) + ",";
+      output += "IW:" + String(hardwareAvTable[0]) + ",";
+      output += "SW:" + String(hardwareAvTable[10]) + ",";
       output += "Rs:" + String(Resets) + ",";
       output += "AA:" + String(ADCS_Active) + ",";
       output += "XD:" + String(CurXDir) + ",";
@@ -726,8 +689,74 @@ class masterStatus {
       output += "ZP:" + String(CurZPWM) + "}";
       return output;
     }
+
+    float roundDecimal(float num, int places) {
+      int roundedNum = round(pow(10, places) * num);
+      return roundedNum / ((float)(pow(10, places)));
+    }
+
+    String chop(float num, int p) {
+      String s = String(num);
+      if (p == 0) {
+        return s.substring(0, s.indexOf('.'));
+      }
+      return s.substring(0, s.indexOf('.') + p + 1);
+    }
+
+    String OutputString() {
+      //round floats first
+      //(round(),2)
+      //constrain
+      //getbytes for loop
+      String OutputString = "";
+      OutputString += chop(constrain(roundDecimal(Gyro[0], 1), -245, 245), 1) + ",";
+      OutputString += chop (constrain(roundDecimal(Gyro[1], 1), -245, 245), 1) + ",";
+      OutputString += chop (constrain(roundDecimal(Gyro[2], 1), -245, 245), 1) + ",";
+      OutputString += chop (constrain(roundDecimal(Mag[0], 2), -2, 2), 2) + ",";
+      OutputString += chop (constrain(roundDecimal(Mag[1], 2), -2, 2), 2) + ",";
+      OutputString += chop (constrain(roundDecimal(Mag[2], 2), -2, 2), 2) + ",";
+      OutputString += chop (constrain(roundDecimal(ImuTemp, 0), -60, 90), 0) + ",";
+      OutputString += chop (constrain(roundDecimal(AnalogTemp, 0), -60, 90), 0) + ",";
+      OutputString += chop (constrain(roundDecimal(Battery, 2), 2.75, 4.2), 2) + ",";
+      OutputString += chop (constrain(roundDecimal(1000 * SolarXPlus, 0), 0, 300), 0) + ",";
+      OutputString += chop (constrain(roundDecimal(1000 * SolarXMinus, 0), 0, 300), 0) + ",";
+      OutputString += chop (constrain(roundDecimal(1000 * SolarYPlus, 0), 0, 300), 0) + ",";
+      OutputString += chop (constrain(roundDecimal(1000 * SolarYMinus, 0), 0, 300), 0) + ",";
+      OutputString += chop (constrain(roundDecimal(1000 * SolarZPlus, 0), 0, 300), 0) + ",";
+      OutputString += chop (constrain(roundDecimal(1000 * SolarZMinus, 0), 0, 300), 0) + ",";
+      OutputString += chop (constrain(roundDecimal(DoorSense, 2), 0, 4), 2) + ",";
+      OutputString += chop (constrain(roundDecimal(LightSense, 0), 0, 100), 0) + ",";
+      OutputString += chop (constrain(roundDecimal(numPhotos, 0), 0, 99), 0) + ",";
+      //      String(hardwareAvTable[0]);
+      //      String(SlaveWorking);//TODO
+      //      String(Resets);
+      //      String(ADCS_Active);
+      OutputString += chop (constrain(roundDecimal(CurXDir, 0), -1, 1), 0) + ",";
+      OutputString += chop (constrain(roundDecimal(CurXPWM, 2), 0, 4), 2) + ",";
+      OutputString += chop (constrain(roundDecimal(CurYDir, 0), -1, 1), 0) + ",";
+      OutputString += chop (constrain(roundDecimal(CurYPWM, 2), 0, 4), 2) + ",";
+      OutputString += chop (constrain(roundDecimal(CurZDir, 0), -1, 1), 0) + ",";
+      OutputString += chop (constrain(roundDecimal(CurZPWM, 2), 0, 4), 2) + ",";
+      //      if string length less thatn max number add random symbols until it is max length
+
+      for (int i = 109 - OutputString.length(); i <= (109 - OutputString.length() + 1); i++) {
+        OutputString[i] = 2;
+      }
+
+
+      byte DLBIN[OutputString.length()];
+      OutputString.getBytes(DLBIN, OutputString.length());
+      Serial.print(OutputString);
+      for (int i = 0; i < OutputString.length() - 1; i++) {
+        Serial.print("00");
+        Serial.print(DLBIN[i], BIN);
+        Serial.print(" ");
+      }
+      Serial.println("");
+      return OutputString;
+    }
 };
-masterStatus masterStatusHolder;
+masterStatus masterStatusHolder; //Declare masterStatusHolder
 
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -737,7 +766,7 @@ masterStatus masterStatusHolder;
 //Helper Functions
 
 void initalizePinOut() {
-  //const int DoorSens = 13; pinMode(DoorSens, INPUT); //WRONG
+  //Setup Master Pinout
   if (LED_NOT_DOOR) {
     pinMode(DoorSensePin, OUTPUT); //Red LED and Door Sensor (-_-)
   } else {
@@ -745,15 +774,10 @@ void initalizePinOut() {
   }
   pinMode(DoorTrig, OUTPUT);
   pinMode(BatteryPin, INPUT);
-  //RockBlock Serial Into FCom
-  //RockBlock Serial Out of FCom
   pinMode(RBSleep, OUTPUT);
   pinMode(RB_RI, INPUT);
   pinMode(RB_RTS, INPUT);
-  pinMode(RB_CTS, INPUT);
-  //I2C Data
-  //I2C Clock
-  pinMode(SolarXPlusPin, INPUT); //Solar Current X+
+  pinMode(RB_CTS, INPUT); pinMode(SolarXPlusPin, INPUT); //Solar Current X+
   pinMode(SolarXMinusPin, INPUT); //Solar Current X-
   pinMode(SolarYPlusPin, INPUT); //Solar Current Y+
   pinMode(SolarYMinusPin, INPUT); //Solar Current Y-
@@ -761,13 +785,11 @@ void initalizePinOut() {
   pinMode(SolarZMinusPin, INPUT); //Solar Current Z-
   pinMode(SolarZMinusPin, INPUT); //Slave Fault Handing (via Hard Reset)
   pinMode(DoorMagEnable, OUTPUT); //Allow Door Magnetorquer to work
-
 }
 
 float getCurrentAmp(int panel) {
-  //Returns Amperage of current sensors at senseCurrent 4v/amp (40k resistor)
-  //1v/A @10k
-  //8.2V/A @82k
+  //Returns Amperage of current sensors for panel # <panel>
+  //1v/A @10kOhm 8.2V/A @82kOhm
   float current;
   switch (panel) {
     case 1:
@@ -807,13 +829,9 @@ float getCurrentAmp(int panel) {
         current = 0;
       } break;
   }
-  //0.12195
-  //Serial.println(current);
   current = fmap((float)current, 0.0, 1023.0, 0, .40244); //3.3V=.825A
-  // 8.2V/A with a 82k Resistor
   return current;
 }
-
 
 float getTotalAmperage() {
   //Check the amps from each solar panel and returns total amperage
@@ -824,9 +842,9 @@ float getTotalAmperage() {
   return TotalCurrent;
 }
 
-//Determine Remaining RAM
 extern "C" char *sbrk(int i);
 int freeRam () {
+  //Determine Remaining RAM on Master
   char stack_dummy = 0;
   return &stack_dummy - sbrk(0);
 }
@@ -838,11 +856,11 @@ void waitForInterrupt() {
 }
 
 void SensorDataCollect() { //TODO
+  //Collect Sensor Data and Average it if sufficient time has passed
   masterStatusHolder.updateSensors();
   IMUrecords++;
-  //Request Light/Temp Data From Slave
   if (millis() - lastIMUTime > imuSensorDwell) {
-    if (imuWorking) {
+    if (masterStatusHolder.hardwareAvTable[0]) {
       masterStatusHolder.Gyro[0] = masterStatusHolder.GyroAcc[0] / ((float)IMUrecords);
       masterStatusHolder.Gyro[1] = masterStatusHolder.GyroAcc[1] / ((float)IMUrecords);
       masterStatusHolder.Gyro[2] = masterStatusHolder.GyroAcc[2] / ((float)IMUrecords);
@@ -867,6 +885,7 @@ void SensorDataCollect() { //TODO
 ////Parser Functions
 
 void buildBuffer(String com) {
+  //Check if incoming String <com> is valid set of commands and add it to the CommandBuffer
   int commandData;
   int commandType;
   String comRemaining = com;
@@ -887,7 +906,7 @@ void buildBuffer(String com) {
 }
 
 boolean isInputValid(String input) {
-  //Check if incoming command is valid
+  //Check if incoming command string <input> is valid
   int lastPunc = 0; //1 if ",", 2 if "!", 0 Otherwise
   bool valid = true;
   int q = 0;
@@ -971,23 +990,19 @@ boolean isInputValid(String input) {
 }
 
 void popCommands() {
-  //Process All the Incoming Commands
-  while (cBuf.openSpot > 0) { //Manual Timeout
-    //Serial.println ("Executing Command:");
+  //Process all the Incoming Commands
+  while (cBuf.openSpot > 0) { //TODO ManTimeout
     if (cBuf.openSpot > 0) {
       Serial.println (cBuf.openSpot - 1);
       int currentCommand[2] = {cBuf.commandStack[cBuf.openSpot - 1][0], cBuf.commandStack[cBuf.openSpot - 1][1]};
-      //Serial.print(currentCommand[0]);
-      //Serial.print(":");
-      //Serial.println(currentCommand[1]);
       cBuf.commandStack[cBuf.openSpot - 1][0] = -1;
       cBuf.commandStack[cBuf.openSpot - 1][1] = -1;
       cBuf.openSpot --;
-      //Place the Command ID in the "#"
 
-      //Commands
+      //Supported Commands
       switch (currentCommand[0]) {
         case (91): //Arm Deployment
+          DA_Initialize = true;
           masterStatusHolder.NextState = DEPLOY_ARMED;
         case (92): //Set Deploy Timeout (seconds)
           if (currentCommand[1] >= 2000) {
@@ -999,7 +1014,6 @@ void popCommands() {
             manualTimeout = (currentCommand[1]);
           }
           break;
-
         case (94): { //Toggle ADCS
             String com = "91," + String(currentCommand[1]) + "!";
             sendSCommand(com);
@@ -1011,10 +1025,19 @@ void popCommands() {
             }
             break;
           }
+        case (96): //Test Force Deploy
+          digitalWrite(DoorTrig, HIGH);
+          break;
+        case (97): { //Check System Time
+            long t = millis();
+            Serial.println("<<System Time: " + String(t % (long)60 * 60000) + ":" +
+                           String(t % (long)60000) + ":" + String(t % (long)1000) + ">>");
+            break;
+          }
         case (51): //Take Photos
           sendSCommand("101,1!");
           break;
-        case (52): { //Set PhotoBurst Time
+        case (52): { //Set PhotoBurst Time in seconds
             String com = "102," + String(currentCommand[1]) + "!";
             sendSCommand(com);
             break;
@@ -1027,34 +1050,34 @@ void popCommands() {
           Serial.println("Wiping SD Card");
           sendSCommand("107,1!");
           break;
-        case (61):
+        case (61): //Update Master Resets (Recieve from Slave Only)
           masterStatusHolder.MResets = (currentCommand[1]);
           break;
-        case (62):
+        case (62): //Update Analog Temp (Recieve from Slave Only)
           masterStatusHolder.AnalogTemp = (currentCommand[1]);
           break;
-        case (63):
+        case (63): //Update Light Sense (Recieve from Slave Only)
           masterStatusHolder.LightSense = (currentCommand[1]);
           break;
-        case (64):
+        case (64): //Update X coil Direction (Recieve from Slave Only)
           masterStatusHolder.CurXDir = (currentCommand[1]);
           break;
-        case (65):
+        case (65): //Update Y coil Direction (Recieve from Slave Only)
           masterStatusHolder.CurYDir = (currentCommand[1]);
           break;
-        case (66):
+        case (66): //Update Z coil Direction (Recieve from Slave Only)
           masterStatusHolder.CurZDir = (currentCommand[1]);
           break;
-        case (67):
+        case (67): //Update X coil PWM (Recieve from Slave Only)
           masterStatusHolder.CurXPWM = (currentCommand[1]);
           break;
-        case (68):
+        case (68): //Update Y coil PWM (Recieve from Slave Only)
           masterStatusHolder.CurYPWM = (currentCommand[1]);
           break;
-        case (69):
+        case (69): //Update Z coil PWM (Recieve from Slave Only)
           masterStatusHolder.CurZPWM = (currentCommand[1]);
           break;
-        case (610):
+        case (610): //Update Number of Photos Stored (Recieve from Slave Only)
           masterStatusHolder.numPhotos = (currentCommand[1]);
           break;
         case (71):
@@ -1078,7 +1101,7 @@ void popCommands() {
         case (77):
           masterStatusHolder.SBDRT = (currentCommand[1]);
           break;
-        case (81): {
+        case (81): { //Move Image from SD->Slave RAM->Master RAM //TODO(and Initiate Downlink)
             masterStatusHolder.imageR = RAMImage();
             masterStatusHolder.RequestingImageStatus = 1;
             masterStatusHolder.NextState = IMAGE_REQUEST;
@@ -1093,18 +1116,18 @@ void popCommands() {
             masterStatusHolder.imageR.Filename = filename;
             break;
           }
-        case (83): {
+        case (83): { //Testing Command: Force State to Normal Ops
             masterStatusHolder.RequestingImageStatus = 0;
             masterStatusHolder.NextState = NORMAL_OPS;
             //DANGER
             break;
           }
-        case (111): { //Force SBDIX
+        case (111): { //Force Send SBDIX
             Serial.println("Sent SBDIX");
             sendSBDIX(false); //Does NOT sent Attempting Link to True
             break;
           }
-        case (112): { //Force Ping
+        case (112): { //Force Send Ping
             Serial.println("Sent AT\\r");
             Serial1.print(F("AT\r"));
             break;
@@ -1114,13 +1137,13 @@ void popCommands() {
             Serial1.print(F("AT&K0\r"));
             break;
           }
-        case (114): {  //Force Diable RING //TODO
+        case (114): { //Force Diable RING //TODO
             //            Serial.println("Sent ");
             //            Serial1.print();
             break;
           }
-        case (120):  //Set Broken Components
-          if (currentCommand[1] <= 10) {
+        case (120):  //Toggle Broken Components in Hardware Availablity Table
+          if (currentCommand[1] <= 11) {
             masterStatusHolder.hardwareAvTable[currentCommand[1]] =
               !masterStatusHolder.hardwareAvTable[currentCommand[1]];
           }
@@ -1132,7 +1155,7 @@ void popCommands() {
 }
 
 void readSerialAdd2Buffer() {
-  //Testing
+  //Read Testing Commands from USB Serial
   if (Serial.available() > 0) {
     Serial.println("Reading Testing Command");
     String comString = "";
@@ -1175,6 +1198,7 @@ void readSerialAdd2Buffer() {
 */
 
 void sendSCommand(String data) {
+  //Send Command to Slave Core
   Serial.print("Command Sent to Slave: <");
   Serial.println(data + ">");
   char com[data.length() + 1];
@@ -1187,6 +1211,7 @@ void sendSCommand(String data) {
 }
 
 void sectionReadToValue(String s, int * data, int dataSize) {
+  //Convert Array of Strings <s> to Array of ints <data> with size <dataSize>
   for (int i = 0; i < dataSize; i++) {
     data[i] = (s.substring(0, s.indexOf(','))).toInt();
     s = s.substring(s.indexOf(',') + 1);
@@ -1269,35 +1294,16 @@ bool requestFromSlave() {
           if (Wire.available()) {
             success = true;
           }
-          //Serial.println(Wire.available());
-          //          masterStatusHolder.MR = ((uint8_t)Wire.read());
-          //          masterStatusHolder.AT = ((uint8_t)Wire.read());
-          //          masterStatusHolder.LS = ((uint8_t)Wire.read());
-          //          masterStatusHolder.XD  = ((uint8_t)Wire.read());
-          //          masterStatusHolder.YD = ((uint8_t)Wire.read());
-          //          masterStatusHolder.ZD = ((uint8_t)Wire.read());
-          //          masterStatusHolder.XP = ((uint8_t)Wire.read());
-          //          masterStatusHolder.YP = ((uint8_t)Wire.read());
-          //          masterStatusHolder.ZP = ((uint8_t)Wire.read());
-          //          masterStatusHolder.NP = ((uint8_t)Wire.read());
-          //          uint8_t MR = ((uint8_t)Wire.read());
-          //          uint8_t AT = ((uint8_t)Wire.read());
-          //          uint8_t LS = ((uint8_t)Wire.read());
-          //          uint8_t XD = ((uint8_t)Wire.read());
-          //          uint8_t YD = ((uint8_t)Wire.read());
-          //          uint8_t ZD = ((uint8_t)Wire.read());
-          //          uint8_t XP = ((uint8_t)Wire.read());
-          //          uint8_t YP = ((uint8_t)Wire.read());
-          //          uint8_t ZP = ((uint8_t)Wire.read());
-          //          uint8_t NP = ((uint8_t)Wire.read());
           String res = "";
           while (Wire.available()) {
             res += (char)Wire.read();
           }
           res = res.substring(0, res.indexOf('|'));
-          Serial.println("SSVs Updated: " + res);
-          int data[10];
-          sectionReadToValue(res, data, 10);
+          if (masterStatusHolder.State != DEPLOY_ARMED) {
+            Serial.println("SSVs Updated: " + res);
+          }
+          int data[11];
+          sectionReadToValue(res, data, 11);
           masterStatusHolder.MResets = data[0];
           masterStatusHolder.AnalogTemp = data[1];
           masterStatusHolder.LightSense = data[2];
@@ -1308,7 +1314,7 @@ bool requestFromSlave() {
           masterStatusHolder.CurYPWM = data[7];
           masterStatusHolder.CurZPWM = data[8];
           masterStatusHolder.numPhotos = data[9];
-
+          masterStatusHolder.CameraStatus = data[10];
           break;
         }
     }
@@ -1377,7 +1383,7 @@ bool rockOKParse() {
   return valid;
 }
 
-void RBDATA() {
+void RBData() {
   int swnumber = 0;
   String ReceivedMessage = rocResponseRead(); //determines case
   Serial.print("<" + ReceivedMessage + ">");
@@ -1471,7 +1477,7 @@ void RBDATA() {
 
       //Safe to do here????
       masterStatusHolder.AttemptingLink = false;
-
+      masterStatusHolder.RBCheckType = 0;
       break;
 
     case 2: //SBDRT command
@@ -1482,27 +1488,32 @@ void RBDATA() {
       } else {
         //Invalid Uplink
         masterStatusHolder.LastMsgType = 0;
+
       }
       break;
     case 3://SBDRING
       //Message is waiting the Buffer
       masterStatusHolder.LastMsgType = 2;
+      masterStatusHolder.LastSMsgType = 2;
       //return "";
       break;
     case 4: //OK
       masterStatusHolder.LastMsgType = 1;
+      masterStatusHolder.LastSMsgType = 1;
       //return "";
       break;
     case 5: // ring
       masterStatusHolder.LastMsgType = 3;
+      masterStatusHolder.LastSMsgType = 3;
       //return "";
       break;
     case 6: // blank msg //TODO
-      //masterStatusHolder.LastMsgType = 0;
+      masterStatusHolder.LastMsgType = 0;
       //return "";
       break;
     case 7: // ready
       masterStatusHolder.LastMsgType = 4;
+      masterStatusHolder.LastSMsgType = 4;
       break;
     case 0: // invalid
       masterStatusHolder.LastMsgType = 0;
@@ -1581,7 +1592,7 @@ int downlinkSegment(int segIndex) {
   //  Serial.println("\n<<Response 1");
   //  /////////////////////////////////
 
-  RBDATA();
+  RBData();
   if (!(masterStatusHolder.LastMsgType == 4)) {
     //No Ready Recieved
     return 1;
@@ -1606,7 +1617,7 @@ int downlinkSegment(int segIndex) {
   //  Serial.println("\n<< Response 2");
   //  /////////////////////////////////
 
-  RBDATA();
+  RBData();
   if (!(masterStatusHolder.LastMsgType == 1)) {
     //No Ok Recieved
     return 2;
@@ -1717,30 +1728,27 @@ void setupWDT( uint8_t period) {
 
 void Stall() {
   stall = true;
-  int i = 0;
+  long start = millis();
   Serial.println("Awaiting Input");
   if (LED_NOT_DOOR) {
-    while (stall) {
+    while (millis() - start < 8000) { //(stall) {
       digitalWrite(13, HIGH);
       delay(40);
       digitalWrite(13, LOW);
       delay(40);
       Serial.print(".");
-      i++;
     }
   } else {
-    while (stall) {
+    while (millis() - start < 8000) { //(stall) {
       delay(80);
       Serial.print(".");
-      i++;
     }
   }
 }
 
 //// Main Loop
 
-void setup()
-{
+void setup() {
 
   digitalWrite(12, HIGH);
   attachInterrupt(digitalPinToInterrupt(12), waitForInterrupt, LOW);
@@ -1748,95 +1756,36 @@ void setup()
   Serial1.begin(19200);
   Wire.begin(); //Start i2c as master
   //while (!Serial);
-  delay(100);
-  //Stall();
+  Stall();
 
   Serial.println("\nStarting IMU");
-  ImuWireConnected = true;
-  if (!imu.begin())
-  {
+
+  if (!imu.begin()) {
     Serial.println("IMU Failed");
-    ImuWireConnected = false;
+    masterStatusHolder.hardwareAvTable[0] = false;
   }
 
-  int trys = 0;
-  //  while (true) {
-  //    if (trys % 50 == 0) {
-  //      Serial.println();
-  //    }
-  //    Serial.print("!");
-  //    if (!imu.begin()) {
-  //      Serial.println("\nIMU Active");
-  //      ImuWireConnected = true;
-  //      break;
-  //    }
-  //    if (trys > 1000) {
-  //      Serial.println("\nIMU failed, or not present");
-  //      ImuWireConnected = false;
-  //      break;
-  //    }
-  //    delay(5);
-  //    trys++;
-  //  }
-
-  //  Serial.println("Starting IMU");
-  //  if (!imu.begin())
-  //  {
-  //    Serial.println("IMU Failed");
-  //    while (1);
-  //  }
-  //Serial.println("Succesful Start");
-  Serial.println("");
-  Serial.println("");
-
-  //Stall();
+  Serial.println("Successful Start");
 
   initalizePinOut();
   digitalWrite(SlaveReset, HIGH); //Enable Slave
-  //Reset Indication
-  pinMode(8, OUTPUT);
-
+  delay(1000);
   Stall();
-
-  digitalWrite(8, HIGH);
 
   cBuf = commandBuffer();
   masterStatusHolder = masterStatus();
+  masterStatusHolder.deploySetting = 1; //Just Light
 
   //Try to initialize and warn if we couldn't detect the chip
   int endT = millis() + manualTimeout;
 
-  //  Serial.println("there");
-  //  masterStatusHolder.configureSensor();
-  //  Serial.println("there");
-
-  //  imu.setupMag(imu.LSM9DS0_MAGGAIN_2GAUSS);
-  //  imu.setupGyro(imu.LSM9DS0_GYROSCALE_245DPS);
-
-  //Testing Image Downlink
-  //  SD.begin(chipSelect);
-  //  buildImageBuffer(Filename);
-  //  Serial.println("\n\nPrint Start");
-  //  masterStatusHolder.imageR.printRI();
-  //  Serial.println("\nPrint End");
-
-
-
-  //masterStatusHolder.configureSensor(); //runs configureSensor function
-  digitalWrite(8, LOW);
   masterStatusHolder.RequestingImageStatus = 0;
   masterStatusHolder.State = NORMAL_OPS;
   masterStatusHolder.NextState = NORMAL_OPS;
-
-  //  masterStatusHolder.RequestingImageStatus = 1;
-  //  masterStatusHolder.State = IMAGE_REQUEST;
-  //  masterStatusHolder.NextState = IMAGE_REQUEST;
-
-
   Serial.println(F("Setup Done"));
-
 }
 
+//Testing Variables
 bool downlinkJustStaged = false;
 //bool ImageDownlink_Active = true;
 const int DOWNLINK_TESTING = 999;
@@ -1844,6 +1793,7 @@ const int DOWNLINK_TESTING = 999;
 int Requests = 0;
 long linkTime = 0;
 int trys = 0;
+
 void loop() {
   readSerialAdd2Buffer(); //Testing Command Input
   //masterStatusHolder.State = IMAGE_REQUEST;
@@ -1873,13 +1823,10 @@ void loop() {
               }
               //delay(5);
               if (lastRead) {
-                //          Wire.flush();
-                //          Wire.end();
-                //          Wire.begin();
                 masterStatusHolder.RequestingImageStatus = 0;
                 Requests = 0;
                 lastRead = false;
-                masterStatusHolder.NextState = DOWNLINK_TESTING; //NORMAL_OPS;// ?
+                masterStatusHolder.NextState = NORMAL_OPS;//DOWNLINK_TESTING; ?
                 sendSCommand("104,1!");
                 Serial.println("");
                 masterStatusHolder.imageR.printRI();
@@ -1905,7 +1852,6 @@ void loop() {
       }
 
     case (DOWNLINK_TESTING):
-      //if (ImageDownlink_Active) {
       if (masterStatusHolder.currentSegment <= masterStatusHolder.imageR.finalIndex) {
         if (masterStatusHolder.MOStatus == 0) { //|| masterStatusHolder.currentSegment == 0) {
           //Attempt Segment Downlink
@@ -1938,14 +1884,15 @@ void loop() {
           if (trys % 50 == 0) {
             Serial.println("");
           }
-          //Serial.print("w");
           trys++;
 
-          RBDATA(); //Can Reset MOStatus to 0
+          RBData(); //Can Reset MOStatus to 0
           delay(200);
         }
+      } else {
+        masterStatusHolder.NextState = NORMAL_OPS;
       }
-      //}
+      //TODO Timeout
       break;
 
     case (NORMAL_OPS):
@@ -1953,23 +1900,49 @@ void loop() {
       //Collect Sensor Data
       SensorDataCollect();
 
+      //RockBlock Communication
       if (millis() - lastRBCheck >= RBCheckTime) {
-        Serial.print("<R");
+        switch (masterStatusHolder.RBCheckType) {
+          case (0): //Ping RockBlock to ensure Functionality
+            if (!masterStatusHolder.AttemptingLink) {
+              Serial.print("<R");
+              Serial1.println("AT\r");
+              Serial.print(String(rockOKParse()) + ">");
+            }
+            break;
+          case (1): //Contact Iridium and Check for Messages
+            sendSBDIX(true);
+            break;
+          case (2): //Fetch Incomming Command
+            Serial1.print("AT+SBDRT\r");
+        }
+        delay(100);
+        RBData();
+        masterStatusHolder.RBCheckType = 0;
+        if (RBPings >= 100) { // ~10min
+          masterStatusHolder.RBCheckType = 1;
+          RBPings = 0;
+        }
+        if (false) { //TODO messages waiting
 
-        Serial1.println("AT\r");
-        Serial.print(String(rockOKParse()) + ">");
-        //        //delay(10);
-        //        RBDATA();
-        //        Serial1.print(F("AT&K0\r"));
-        //        delay(10);
-        //        RBDATA();
+
+        }
         lastRBCheck = millis();
+        RBPings++;
+      }
+
+      //Just Print Camera Status for Testing
+      if (millis() - lastCamTime > 4000){
+        Serial.print("<C"+String(masterStatusHolder.CameraStatus)+">");
+        lastCamTime = millis();
       }
 
       //Testing IMU and Sensor Downlink String Generator
       if (millis() - lastDLTime >= DLTime || commandedDL) {
         //Send Data to RockBlock via Serial
         String DLS = masterStatusHolder.toString();
+        //String DLSshort = masterStatusHolder.OutputString();
+
         Serial.println(F(""));
         Serial.println(DLS);
         //Serial.println(DLS.length());
@@ -1977,8 +1950,8 @@ void loop() {
       }
 
       //Test Slave Communication
-      if (TestSCom && WireConnected) {
-        //unsigned long t = millis();
+      if (true) { //masterStatusHolder.hardwareAvTable[10]) {
+        unsigned long t = millis();
         if (millis() - lastSComAttempt >= SComTime) {
           lastSComAttempt = millis();
           Serial.print("\nSlave IMU transfer: ");
@@ -2014,6 +1987,7 @@ void loop() {
 
       //ADCS
       if (millis() - LastSpinCheckT > SpinCheckTime) {
+        Serial.println("Here3");
         LastSpinCheckT = millis();
         if (masterStatusHolder.Gyro[0] > OmegaThreshold || masterStatusHolder.Gyro[1] > OmegaThreshold) {
           sendSCommand("91,1!"); //Activate Torquers
@@ -2057,7 +2031,6 @@ void loop() {
       break;
 
     case (DORMANT_CRUISE):
-
       //30 min Dormant Cruise
       if (millis() > cruiseEnd) {
         masterStatusHolder.NextState = INITALIZATION;
@@ -2067,8 +2040,7 @@ void loop() {
       }
       break;
 
-    case (INITALIZATION):
-      {
+    case (INITALIZATION): {
         if (millis() - initEntry < 100) {
           sendSCommand("91,1!");
         }
@@ -2128,56 +2100,97 @@ void loop() {
         break;
       }
 
-    case (DEPLOY_ARMED): {
+    case (DEPLOY_ARMED): { //TODO Broken Door Sensor or Light Sensor Fallback
+        SensorDataCollect();
+        //Serial.print("after sensor data collect");
+        if (millis() - lastSComAttempt >= 5) {
+          lastSComAttempt = millis();
+          sendIMUToSlave();
+          bool SlaveResponse = requestFromSlave();
+          if (SlaveResponse) {
+            lastSComTime = millis(); //Reset Timeout if Com is successful
+          }
+        }
+        Serial.print("<" + String(digitalRead(DoorSensePin)) + "," + String(masterStatusHolder.LightSense) + ">");
+        if (cycle % 29 == 0) {
+          Serial.println("");
+        }
         if (DA_Initialize) {
-          digitalWrite(24, HIGH); //Activate Nichrome
+        //if (true){
+          digitalWrite(DoorTrig, HIGH); //Activate Nichrome
           DA_Initialize = false;
         }
-        if ((masterStatusHolder.hardwareAvTable[8] && masterStatusHolder.DoorSense == LOW) ||
-            (masterStatusHolder.hardwareAvTable[9] && masterStatusHolder.LightSense > LightThreshold)) { //wait for door sensor
-          //Door is open
-          Serial.print(F("Door Release, Start Image Capture"));
-          sendSCommand("101,1!"); //Trigger Camera
-          digitalWrite(DoorTrig, LOW); //deactivate nichrome wire
-          masterStatusHolder.NextState = DEPLOY_VERIF;
-          deployVEntry = millis();
-        } else {
-          if (millis() - deployArmedEntry > (long)(60 * 6 * 1000)) {
-            digitalWrite(DoorTrig, LOW);
-            masterStatusHolder.missionStatus = 3;
-          }
+        switch (masterStatusHolder.deploySetting) {
+          case (0): //Use Door OR Light
+            if (((true) && (digitalRead(DoorSensePin))) ||
+                ((true) && (masterStatusHolder.LightSense > LightThreshold))) { //wait for door sensor
+              //Door is open
+              Serial.print(F("Door Release, Start Image Capture"));
+              digitalWrite(DoorTrig, LOW); //deactivate nichrome wire
+              delay(200); // cameratimer
+              sendSCommand("101,1!"); //Trigger Camera
+              masterStatusHolder.NextState = DEPLOY_VERIF;
+              deployVEntry = millis();
+            }
+            break;
+          case (1): //Just Use Light
+            //if ((masterStatusHolder.hardwareAvTable[9]) && (masterStatusHolder.LightSense > LightThreshold)) { //wait for door sensor
+            if ((true) && (masterStatusHolder.LightSense > LightThreshold)) {
+              //Door is open
+              Serial.print(F("Door Release, Start Image Capture"));
+              digitalWrite(DoorTrig, LOW); //deactivate nichrome wire
+              delay(0);
+              sendSCommand("101,1!"); //Trigger Camera
+              masterStatusHolder.NextState = DEPLOY_VERIF;
+              deployVEntry = millis();
+            }
+            break;
+          case (2): //Just Use Door
+            if ((true) && digitalRead(DoorSensePin)) { //wait for door sensor
+              //Door is open
+              Serial.print(F("Door Release, Start Image Capture"));
+              digitalWrite(DoorTrig, LOW); //deactivate nichrome wire
+              delay(200);
+              sendSCommand("101,1!"); //Trigger Camera
+              masterStatusHolder.NextState = DEPLOY_VERIF;
+              deployVEntry = millis();
+            }
+            break;
+        }
+        if (millis() - deployArmedEntry > (long)(60 * 3 * 1000)) {
+          digitalWrite(DoorTrig, LOW);
+          masterStatusHolder.missionStatus = 3;
         }
         break;
       }
 
     case (DEPLOY_VERIF):
+      Serial.print("$");
+      if (cycle % 100 == 0) {
+        Serial.println("");
+      }
+      delay(10);
       //bool SlaveResponse = requestFromSlave(); //Need inputisvalid
       lastAccelTime = millis();
 
-      if (millis() - lastAccelTime >= 1000 &&  masterStatusHolder.accelIndex <= 40) //take accelerometer data every .5s for 20s
-      {
-        masterStatusHolder.AccelData[0][masterStatusHolder.accelIndex] = masterStatusHolder.Accel[0];
-        masterStatusHolder.AccelData[1][masterStatusHolder.accelIndex] = masterStatusHolder.Accel[1];
-        masterStatusHolder.AccelData[2][masterStatusHolder.accelIndex] = masterStatusHolder.Accel[2];
-        lastAccelTime = millis();
-        masterStatusHolder.accelIndex++;
-      }
-      if (masterStatusHolder.LightSense > placeHolderLightSense ) { //LightSensor Trigger
-        masterStatusHolder.PayloadDeployed == true;
+      //      if (millis() - lastAccelTime >= 1000 &&  masterStatusHolder.accelIndex <= 40){ //take accelerometer data every .5s for 20s
+      //        masterStatusHolder.AccelData[0][masterStatusHolder.accelIndex] = masterStatusHolder.Accel[0];
+      //        masterStatusHolder.AccelData[1][masterStatusHolder.accelIndex] = masterStatusHolder.Accel[1];
+      //        masterStatusHolder.AccelData[2][masterStatusHolder.accelIndex] = masterStatusHolder.Accel[2];
+      //        lastAccelTime = millis();
+      //        masterStatusHolder.accelIndex++;
+      //      }
+
+      if (masterStatusHolder.LightSense > LightThreshold) { //LightSensor Trigger
         masterStatusHolder.missionStatus = 2;
+      } else {
+        //masterStatusHolder.PayloadDeployed == false;
       }
-      else {
-        masterStatusHolder.PayloadDeployed == false;
+
+      if (millis() - deployVEntry > 5000) {
+        masterStatusHolder.NextState = NORMAL_OPS;
       }
       break;
-
-    case (DEPLOY_DOWN_LK):
-      //Upon Request Downlink Image
-      //Downlink Data
-
-      break;
-
-
 
     case (LOW_POWER):
       masterStatusHolder.updateSensors(); //Fix Later
@@ -2195,14 +2208,13 @@ void loop() {
   cycle++;
   //Serial.print("C : ");
   //Serial.println(cycle);
-
-  //ROCKBLOCK
-  //  if (millis() - lastRBcheck >= ((long)300000)) {
-  //    RBDATA();
-  //    //responsePing();
-  //    lastRBcheck = millis();
-  //  }
+  if (masterStatusHolder.State == NORMAL_OPS && (millis() % (long)60000 == 0)) {
+    long t = millis();
+    Serial.println("<<System Time: " + String(t % (long)60 * 60000) + ":" +
+                   String(t % (long)60000) + ":" + String(t % (long)1000) + ">>");
+  }
 }
+
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
