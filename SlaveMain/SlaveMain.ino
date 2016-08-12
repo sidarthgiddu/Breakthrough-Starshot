@@ -353,6 +353,9 @@ void runADCS(double* Bvalues, double* gyroData, double Kp, double Kd) {
   //Matrix.Print((double*)Bvalues, 3, 1, "Magn");
   //Matrix.Print((double*)gyroData, 3, 1, "Gyro");
 
+  Matrix.Scale((double*)Bvalues, 3, 1, 100);
+  //Matrix.Print((double*)Bvalues, 3, 1, "Magn");
+
   Matrix.Copy((double*)Bvalues, 1, 3, (double*)Bfield); // create new field to scale for the pseudo-inverse
   //Matrix.Scale((double*)Bfield, 3, 1, E); // scale duplicated Bfield array with E for pseudo-inverse
   //Matrix.Print((double*)Bfield, 3, 1, "Scaled Bfield");
@@ -380,6 +383,7 @@ void runADCS(double* Bvalues, double* gyroData, double Kp, double Kd) {
   Jp[1][0] = Jppinv[1][0]; Jp[1][1] = Jppinv[1][1]; Jp[1][2] = Jppinv[1][2];
   Jp[2][0] = Jppinv[2][0]; Jp[2][1] = Jppinv[2][1]; Jp[2][2] = Jppinv[2][2];
   Matrix.Scale((double*)Jp, 3, 3, 1000000.0);
+  //Matrix.Print((double*)Jp, 3, 3, "Jp");
   //////////////Serial.println(freeRam ());
   double OmegaError[3], BfieldError[3], ErrorSum[3], current[3], OmegaHat[3];
   double Omegacmd[3] = {0, 0, 1};
@@ -405,7 +409,7 @@ void runADCS(double* Bvalues, double* gyroData, double Kp, double Kd) {
   double ex = (Bfield[0] - OmegaHat[0]) / theta;
   double ey = (Bfield[1] - OmegaHat[1]) / theta;
   theta = ey / ex;
-
+  /*
   // test //////// RBF!!!!!!!!!!!! ======================================== ////////////////////////
   theta = 1; // <==================   REMOVE THIS BEFORE FLIGHT //TODO
   //Serial.println ("theta is: "+ String(theta));
@@ -421,35 +425,36 @@ void runADCS(double* Bvalues, double* gyroData, double Kp, double Kd) {
     BfieldError[0] = 0;
     BfieldError[1] = 0;
     BfieldError[2] = 0;
-  }
+  }*/
   /////// END of BfieldError NEW VERSION
 
   /////// BfieldError OLD VERSION
-  /*
+  
      Matrix.Subtract((double*) Bfield, (double*) Bcmd, 3, 1, (double*) BfieldError);
     //Serial.println ("Step 5 complete");
     Matrix.Scale((double*)BfieldError, 3, 1, (Kp / A)); // scale error with proportional gain (updates array)
-  */
+  
   /////// END of BfieldError OLD VERSION
 
   //Serial.println ("Step 7 complete");
 
-  Matrix.Add((double*)BfieldError, (double*)OmegaError, 3, 1, (double*) ErrorSum);
-  //Serial.println ("Step 9 complete"); delay(50);
-
   Matrix.Scale((double*)OmegaError, 3, 1, (Kd / A)); // scale error with derivative gain (updates array)
   //Serial.println ("Step 8 complete");
 
+  Matrix.Add((double*)BfieldError, (double*)OmegaError, 3, 1, (double*) ErrorSum);
+  //Serial.println ("Step 9 complete"); delay(50);
+  //Matrix.Print((double*)ErrorSum, 3, 1, "MATRIX TO CHECK");
+
   Matrix.Scale((double*) ErrorSum, 3, 1, -1.0); // prep error for multiplication with the Jpinv matrix
   //Serial.println ("Step 10 complete"); delay(50);
-
   //Matrix.Print((double*)ErrorSum, 3, 1, "MATRIX TO CHECK");
-  //Matrix.Print((double*)Jp, 3, 3, "Jpinv");
+  
 
   //Serial.println(freeRam ()); delay(50);
   Matrix.Multiply((double*) Jp, (double*) ErrorSum, 3, 3, 1, (double*) current);
   //Serial.println ("Step 11 complete");
-
+  Matrix.Print((double*)current, 3, 1, "Current");
+  
   //////////////Serial.println(freeRam ());
   //delete (Jp); delete  (Jtranspose); delete  (Jppinv);
   //delete (gyroData); delete (Bvalues); delete (Jnew);
@@ -1129,11 +1134,17 @@ void loop() {
   //StatusHolder.ADCS_Active = false;
   //Test ADCS
   if (StatusHolder.ADCS_Active) {
+    
     if (millis() - lastADCSTime >= 2000) {
       if (millis() - lastADCSTime >= 2100) {
         //Serial.println("happy");
-        runADCS(mData, gData, Kp, Kd);
-        //runADCS(StatusHolder.mag, StatusHolder.gyro, Kp, Kd); //placeholders
+        //runADCS(mData, gData, Kp, Kd);
+        Serial.println();
+        Serial.println(StatusHolder.mag[0]);
+        Serial.println(StatusHolder.mag[1]);
+        Serial.println(StatusHolder.mag[2]);
+        
+        runADCS(StatusHolder.mag, StatusHolder.gyro, Kp, Kd); //placeholders
         //Serial.println("still happy");
         //Serial.print("X axis: "); Serial.print(StatusHolder.CurXDir, 20); Serial.print(" "); Serial.println(StatusHolder.CurXPWM, 20);
         //Serial.print("Y axis: "); Serial.print(StatusHolder.CurYDir, 20); Serial.print(" "); Serial.println(StatusHolder.CurYPWM, 20);

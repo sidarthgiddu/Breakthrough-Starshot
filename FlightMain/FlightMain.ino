@@ -62,7 +62,7 @@ bool RBPingOut = false;
 
 //IMU and Sensor Test
 Adafruit_LSM9DS0 imu = Adafruit_LSM9DS0();
-int imuSensorDwell = 100; //Averaging Time Non-BLOCKING!
+int imuSensorDwell = 5; //100; //Averaging Time Non-BLOCKING!
 unsigned long lastIMUTime = 0;
 int IMUrecords = 0;
 
@@ -101,10 +101,10 @@ const int RB_RTS = 24;
 const int RB_CTS = 6;
 const int SDApin = 20; //I2C Data
 const int SCLpin = 21; //I2C Clock
-const int SolarXPlusPin = A1; //Solar Current X+
-const int SolarXMinusPin = A2; //Solar Current X-
-const int SolarYPlusPin = A3; //Solar Current Y+
-const int SolarYMinusPin = A4; //Solar Current Y-
+const int SolarXPlusPin = A4; //Solar Current X+
+const int SolarXMinusPin = A3; //Solar Current X-
+const int SolarYPlusPin = A2; //Solar Current Y+
+const int SolarYMinusPin = A1; //Solar Current Y-
 const int SolarZPlusPin = A5; //Solar Current Z+
 const int SolarZMinusPin = 9; //Solar Current Z-
 const int SlaveReset = 10; //Slave Fault Handing (via Hard Reset)
@@ -454,9 +454,9 @@ floatTuple getMagData(Adafruit_LSM9DS0 imu) {
 
 floatTuple getGyroData(Adafruit_LSM9DS0 imu) {
   //Returns vector of gyro data from Adafruit_LSM9DS0 <imu>
-  floatTuple gData = floatTuple((int)imu.gyroData.x * (245.0 / 32768),
-                                (int)imu.gyroData.y * (245.0 / 32768),
-                                (int)imu.gyroData.z * (245.0 / 32768));
+  floatTuple gData = floatTuple((int)(imu.gyroData.y * (245.0 / 32768)-(1.37))*(-1),
+                                (int)(imu.gyroData.x * (245.0 / 32768)-(-4.12))*(-1),
+                                (int)(imu.gyroData.z * (245.0 / 32768)-(-2.09)));
   return gData;
 }
 
@@ -1002,8 +1002,8 @@ void popCommands() {
       //Supported Commands
       switch (currentCommand[0]) {
         case (91): //Arm Deployment
-          DA_Initialize = true;
           masterStatusHolder.NextState = DEPLOY_ARMED;
+          DA_Initialize = true;
         case (92): //Set Deploy Timeout (seconds)
           if (currentCommand[1] >= 2000) {
             deployTimeOut = (currentCommand[1]) * 1000;
@@ -1932,8 +1932,8 @@ void loop() {
       }
 
       //Just Print Camera Status for Testing
-      if (millis() - lastCamTime > 4000){
-        Serial.print("<C"+String(masterStatusHolder.CameraStatus)+">");
+      if (millis() - lastCamTime > 4000) {
+        Serial.print("<C" + String(masterStatusHolder.CameraStatus) + ">");
         lastCamTime = millis();
       }
 
@@ -2116,7 +2116,7 @@ void loop() {
           Serial.println("");
         }
         if (DA_Initialize) {
-        //if (true){
+          //if (true){
           digitalWrite(DoorTrig, HIGH); //Activate Nichrome
           DA_Initialize = false;
         }
