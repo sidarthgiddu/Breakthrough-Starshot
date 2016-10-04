@@ -774,7 +774,7 @@ void initalizePinOut() {
   }
   pinMode(DoorTrig, OUTPUT);
   pinMode(BatteryPin, INPUT);
-  pinMode(RBSleep, OUTPUT);
+  pinMode(RBSleep, OUTPUT); digitalWrite(RBSleep, HIGH); //TODO
   pinMode(RB_RI, INPUT);
   pinMode(RB_RTS, INPUT);
   pinMode(RB_CTS, INPUT); pinMode(SolarXPlusPin, INPUT); //Solar Current X+
@@ -1030,7 +1030,7 @@ void popCommands() {
           break;
         case (97): { //Check System Time
             long t = millis();
-            Serial.println("<<System Time: " + String(t % (long)60 * 60000) + ":" +
+            Serial.println("<<System Time: " + String(t % (long)(1000*60*60)) + ":" +
                            String(t % (long)60000) + ":" + String(t % (long)1000) + ">>");
             break;
           }
@@ -1679,6 +1679,21 @@ void print_binary(int v, int num_places) {
 //  masterStatusHolder.imageR.finalIndex = index - 1;
 //  return;
 //}
+
+bool initializeRB(){
+  Serial.println(F("\nInitializing RockBlock"));
+  Serial1.print(F("ATE0\r")); //Disable Echo
+  delay(400);
+  Serial1.print(F("AT+SBDD2\r")); //Clear Buffers
+  delay(400);
+  Serial1.print(F("AT&K0\r")); //Disable Flow Control
+  delay(400);
+  while(Serial1.available()){
+    Serial.print((char)Serial1.read());
+  }
+  return responsePing(); //Ping to Check thats its working
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1729,7 +1744,7 @@ void setupWDT( uint8_t period) {
 void Stall() {
   stall = true;
   long start = millis();
-  Serial.println("Awaiting Input");
+  Serial.println("Stall Delay");
   if (LED_NOT_DOOR) {
     while (millis() - start < 8000) { //(stall) {
       digitalWrite(13, HIGH);
@@ -1782,6 +1797,13 @@ void setup() {
   masterStatusHolder.RequestingImageStatus = 0;
   masterStatusHolder.State = NORMAL_OPS;
   masterStatusHolder.NextState = NORMAL_OPS;
+
+  if (initializeRB()){
+    Serial.println(F("RockBlock Initialization Successful"));
+  } else {
+    Serial.println(F("RockBlock Initialization Failure"));
+  }
+  
   Serial.println(F("Setup Done"));
 }
 
@@ -1917,7 +1939,7 @@ void loop() {
             Serial1.print("AT+SBDRT\r");
         }
         delay(100);
-        RBData();
+        RBData(); //Check for incoming commands
         masterStatusHolder.RBCheckType = 0;
         if (RBPings >= 100) { // ~10min
           masterStatusHolder.RBCheckType = 1;

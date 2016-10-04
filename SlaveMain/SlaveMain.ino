@@ -3,6 +3,7 @@
 #include <Adafruit_VC0706.h>
 #include <SPI.h>
 #include <SD.h>
+#include <b64.h>
 
 ////Constant Initialization
 bool camStatus = false;
@@ -164,6 +165,14 @@ class RAMImageSlave {
       Serial.println("   Current Index: " + String(currentIndex));
       Serial.println("\nBinary Form:");
       printArray(a, photosize);
+      Serial.println();
+      unsigned char output[photosize];
+      //char * input = a;
+
+//      b64_encode(a, photosize, output, photosize);
+//      for (int i = 0; i < photosize; i++) {
+//        Serial.print((char)output[i]);
+      }
     }
 
     RAMImageSlave() {
@@ -410,31 +419,31 @@ void runADCS(double* Bvalues, double* gyroData, double Kp, double Kd) {
   double ey = (Bfield[1] - OmegaHat[1]) / theta;
   theta = ey / ex;
   /*
-  // test //////// RBF!!!!!!!!!!!! ======================================== ////////////////////////
-  /*
-  //theta = 1; // <==================   REMOVE THIS BEFORE FLIGHT //TODO
-  //Serial.println ("theta is: "+ String(theta));
-  
-  if ((theta <= upperbnd) && (theta >= lowerbnd)){
+    // test //////// RBF!!!!!!!!!!!! ======================================== ////////////////////////
+    /*
+    //theta = 1; // <==================   REMOVE THIS BEFORE FLIGHT //TODO
+    //Serial.println ("theta is: "+ String(theta));
+
+    if ((theta <= upperbnd) && (theta >= lowerbnd)){
       BfieldError[0] = Bfield[1]*OmegaHat[2] - Bfield[2]*OmegaHat[1];
       BfieldError[1] = Bfield[2]*OmegaHat[0] - Bfield[0]*OmegaHat[2];
       BfieldError[2] = Bfield[0]*OmegaHat[1] - Bfield[1]*OmegaHat[0];
       Matrix.Print((double*)BfieldError, 3, 1, "Updated BfieldError");
       Matrix.Scale((double*)BfieldError, 3, 1, (Kp/A));
       Matrix.Print((double*)BfieldError, 3, 1, "Scaled BfieldError");
-    } else { 
+    } else {
     BfieldError[0] = 0;
     BfieldError[1] = 0;
     BfieldError[2] = 0;
-  }*/
+    }*/
   /////// END of BfieldError NEW VERSION
 
   /////// BfieldError OLD VERSION
-  
-     Matrix.Subtract((double*) Bfield, (double*) Bcmd, 3, 1, (double*) BfieldError);
-    //Serial.println ("Step 5 complete");
-    Matrix.Scale((double*)BfieldError, 3, 1, (Kp / A)); // scale error with proportional gain (updates array)
- 
+
+  Matrix.Subtract((double*) Bfield, (double*) Bcmd, 3, 1, (double*) BfieldError);
+  //Serial.println ("Step 5 complete");
+  Matrix.Scale((double*)BfieldError, 3, 1, (Kp / A)); // scale error with proportional gain (updates array)
+
   /////// END of BfieldError OLD VERSION
 
   //Serial.println ("Step 7 complete");
@@ -449,13 +458,13 @@ void runADCS(double* Bvalues, double* gyroData, double Kp, double Kd) {
   Matrix.Scale((double*) ErrorSum, 3, 1, -1.0); // prep error for multiplication with the Jpinv matrix
   //Serial.println ("Step 10 complete"); delay(50);
   //Matrix.Print((double*)ErrorSum, 3, 1, "MATRIX TO CHECK");
-  
+
 
   //Serial.println(freeRam ()); delay(50);
   Matrix.Multiply((double*) Jp, (double*) ErrorSum, 3, 3, 1, (double*) current);
   //Serial.println ("Step 11 complete");
   Matrix.Print((double*)current, 3, 1, "Current");
-  
+
   //////////////Serial.println(freeRam ());
   //delete (Jp); delete  (Jtranspose); delete  (Jppinv);
   //delete (gyroData); delete (Bvalues); delete (Jnew);
@@ -488,32 +497,32 @@ void outputPWM(double* I, int length) {
   //StatusHolder.pwmWrite(I[0] / Imax * 255,I[1] / Imax * 255,I[2] / Imax * 255);
   /// ...
   analogWrite(CX_PWM, I[0] / Imax * 255);
-  analogWrite(CY_PWM, I[1] / Imax * 255); 
+  analogWrite(CY_PWM, I[1] / Imax * 255);
   analogWrite(CZ_PWM, I[2] / Imax * 255);
 
-    if (sgn(I[0]) >= 0) {
-      digitalWrite(CX1, HIGH);
-      digitalWrite(CX2, LOW);
-    } else {
-      digitalWrite(CX1, LOW);
-      digitalWrite(CX2, HIGH);
-    }
-    if (sgn(I[1]) >= 0) {
-      digitalWrite(CY1, HIGH);
-      digitalWrite(CY2, LOW);
-    } else {
-      digitalWrite(CY1, LOW);
-      digitalWrite(CY2, HIGH);
-    }
+  if (sgn(I[0]) >= 0) {
+    digitalWrite(CX1, HIGH);
+    digitalWrite(CX2, LOW);
+  } else {
+    digitalWrite(CX1, LOW);
+    digitalWrite(CX2, HIGH);
+  }
+  if (sgn(I[1]) >= 0) {
+    digitalWrite(CY1, HIGH);
+    digitalWrite(CY2, LOW);
+  } else {
+    digitalWrite(CY1, LOW);
+    digitalWrite(CY2, HIGH);
+  }
 
-    if (sgn(I[2]) >= 0) {
-      digitalWrite(CZ1, HIGH);
-      digitalWrite(CZ2, LOW);
-    } else {
-      digitalWrite(CZ1, LOW);
-      digitalWrite(CZ2, HIGH);
-    }
-  
+  if (sgn(I[2]) >= 0) {
+    digitalWrite(CZ1, HIGH);
+    digitalWrite(CZ2, LOW);
+  } else {
+    digitalWrite(CZ1, LOW);
+    digitalWrite(CZ2, HIGH);
+  }
+
 
   floatTuple PWMvaluesForTorquers = floatTuple(I[0] / Imax * 255, I[1] / Imax * 255, I[2] / Imax * 255);
   floatTuple PWMdirectionsForTorquers = floatTuple(sgn(I[0]), sgn(I[1]), sgn(I[2]));
@@ -759,7 +768,7 @@ void PopCommands() {
         case (105): //Image Retrival
           StatusHolder.ITStatus = 2; //Send Image
           break;
-        case (106): {
+        case (106): {//Print SD Card
             File root = SD.open("/");
             root.rewindDirectory();
             Serial.println("");
@@ -1156,7 +1165,7 @@ void loop() {
   readSerialAdd2Buffer();
   //Serial.println(SDActive);
   StatusHolder.updatePassive();
-  //StatusHolder.ADCS_Active = false;
+  StatusHolder.ADCS_Active = false;
   //Test ADCS
   if (StatusHolder.ADCS_Active) {
     if (millis() - lastADCSTime >= 2000) {
@@ -1167,7 +1176,7 @@ void loop() {
         //Serial.println(StatusHolder.mag[0]);
         //Serial.println(StatusHolder.mag[1]);
         //Serial.println(StatusHolder.mag[2]);
-        
+
         runADCS(StatusHolder.mag, StatusHolder.gyro, Kp, Kd); //placeholders
         //Serial.println("still happy");
         //Serial.print("X axis: "); Serial.print(StatusHolder.CurXDir, 20); Serial.print(" "); Serial.println(StatusHolder.CurXPWM, 20);
