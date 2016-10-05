@@ -118,6 +118,7 @@ const int DoorMagEnable = 11; //Allow Door Magnetorquer to work
 #define DLSize 320
 unsigned long lastCamTime = 0;
 int camCheckTime = 4112;
+#define WireTransferSize 32
 
 bool DA_Initialize;
 
@@ -213,6 +214,16 @@ class RAMImage {
       printArray(a13, sizeArray[13]);
       printArray(a14, sizeArray[14]);
       printArray(a15, sizeArray[15]);
+
+      Serial.println("Base64 Format:\n");
+      String b64 = Hash_base64(a, sizeof(a));
+      for (int i = 0; i < b64.length(); i++) {
+        Serial.print(b64[i]);
+        if (i % DLSize == 0 && i > 0) {
+          Serial.print("\n");
+        }
+      }
+      Serial.println("\n");
     }
 
     RAMImage() {
@@ -238,7 +249,41 @@ class RAMImage {
       a15[DLSize] = {0};
       //Blank
     }
+    String Hash_base64( uint8_t *in, int hashlength) {
+      int i, out;
+      char b64[(int)(hashlength * (8 / 6.0) + 1)]; // working byte array for sextets....
+      String base64;
+      for (i = 0, out = 0 ;; in += 3) { // octets to sextets
+        i++;
+        b64[out++] = b64chars[in[0] >> 2];
 
+        if (i >= hashlength ) { // single byte, so pad two times
+          b64[out++] = b64chars[((in[0] & 0x03) << 4) ];
+          b64[out++] =  '=';
+          b64[out++] =  '=';
+          break;
+        }
+
+        b64[out++] = b64chars[((in[0] & 0x03) << 4) | (in[1] >> 4)];
+        i++;
+        if (i >= hashlength ) { // two bytes, so we need to pad one time;
+          b64[out++] =  b64chars[((in[1] & 0x0f) << 2)] ;
+          b64[out++] =  '=';
+          break;
+        }
+        b64[out++] = b64chars[((in[1] & 0x0f) << 2) | (in[2] >> 6)];
+        b64[out++] =   b64chars[in[2] & 0x3f];
+
+        i++;
+        if (i >= hashlength ) { // three bytes, so we need no pad - wrap it;
+          break;
+        }
+        //Serial.println(out);
+      } // this should make b64 an array of sextets that is "out" in length
+      b64[out] = 0;
+      base64 = b64;
+      return (base64);
+    }
     void store(uint8_t * data, int dataSize) {
       //Stores an entire Image, splitting it into segments
       int dsize = dataSize;
@@ -251,7 +296,7 @@ class RAMImage {
         } else {
           sizeArray[index] = dsize;
           finalIndex = index;
-          Serial.println(sizeArray[index]);
+          Serial.println(F("Image Stored in RAM"));
           break;
         }
         index++;
@@ -902,7 +947,7 @@ void buildBuffer(String com) {
     cBuf.commandStack[cBuf.openSpot][1] = commandData;
     if (com.indexOf("!") == com.length() - 1) {
       loop = false;
-      Serial.println(F("Finished Adding Commands"));
+      //Serial.println(F("Finished Adding Commands"));
     } else {
       com = com.substring(com.indexOf("!") + 1);
     }
@@ -998,7 +1043,7 @@ void popCommands() {
   //Process all the Incoming Commands
   while (cBuf.openSpot > 0) { //TODO ManTimeout
     if (cBuf.openSpot > 0) {
-      Serial.println (cBuf.openSpot - 1);
+      //Serial.println (cBuf.openSpot - 1);
       int currentCommand[2] = {cBuf.commandStack[cBuf.openSpot - 1][0], cBuf.commandStack[cBuf.openSpot - 1][1]};
       cBuf.commandStack[cBuf.openSpot - 1][0] = -1;
       cBuf.commandStack[cBuf.openSpot - 1][1] = -1;
@@ -1012,11 +1057,13 @@ void popCommands() {
         case (92): //Set Deploy Timeout (seconds)
           if (currentCommand[1] >= 2000) {
             deployTimeOut = (currentCommand[1]) * 1000;
+            Serial.println(("\nDeploy Timeout set to ") + String(currentCommand[1]) + (" sec"));
           }
           break;
         case (93): //Set Manual Function Timeout (millis)
           if (currentCommand[1] >= 2000) {
             manualTimeout = (currentCommand[1]);
+            Serial.println(("\nManual Function Timeout set to ") + String(currentCommand[1]) + (" ms"));
           }
           break;
         case (94): { //Toggle ADCS
@@ -1027,11 +1074,13 @@ void popCommands() {
         case (95): { //Set Master-Slave Command Time (millis)
             if (currentCommand[1] > 0) {
               SComTime = currentCommand[1];
+              Serial.print(("\nSCom Time set to ") + String(currentCommand[1]) + (" ms"));
             }
             break;
           }
         case (96): //Test Force Deploy
           digitalWrite(DoorTrig, HIGH);
+          Serial.println(F("\nForce Deploy"));
           break;
         case (97): { //Check System Time
             long t = millis();
@@ -1048,11 +1097,11 @@ void popCommands() {
             break;
           }
         case (53): { //Get # of Available Photos
-            Serial.println("Photos Available: " + String(masterStatusHolder.numPhotos));
+            Serial.println("\nPhotos Available: " + String(masterStatusHolder.numPhotos));
             break;
           }
         case (54): //Wipe SD Card
-          Serial.println("Wiping SD Card");
+          Serial.println("\nWiping SD Card");
           sendSCommand("107,1!");
           break;
         case (61): //Update Master Resets (Recieve from Slave Only)
@@ -1162,7 +1211,7 @@ void popCommands() {
 void readSerialAdd2Buffer() {
   //Read Testing Commands from USB Serial
   if (Serial.available() > 0) {
-    Serial.println("Reading Testing Command");
+    //Serial.println("Reading Testing Command");
     String comString = "";
     while (Serial.available() > 0) {
       // get the new byte:
@@ -1170,11 +1219,11 @@ void readSerialAdd2Buffer() {
       // add it to the inputString:
       comString += inChar;
     }
-    Serial.println("TCommand: " + comString);
+    //Serial.println("TCommand: " + comString);
     if (isInputValid(comString)) {
-      Serial.println("Testing Command is Valid");
       buildBuffer(comString);
       popCommands();
+
     } else {
       Serial.println("Invalid Testing Command");
     }
@@ -1223,7 +1272,7 @@ void sectionReadToValue(String s, int * data, int dataSize) {
   }
 }
 
-uint8_t segment[4000];
+uint8_t image[6000];
 int dataIndex = 0;
 bool lastRead = false;
 int readSize = 0;
@@ -1240,7 +1289,7 @@ bool requestFromSlave() {
             res += (char)Wire.read();
           }
           readSize = res.toInt();
-          Serial.println("Incoming Photo Size: " + String(readSize));
+          Serial.println("\nIncoming Photo Size: " + String(readSize));
           if (readSize > 7) {
             masterStatusHolder.RequestingImageStatus = 2;
             sendSCommand("105,1!");
@@ -1256,29 +1305,34 @@ bool requestFromSlave() {
           break;
         }
       case (2): { //Get Image Data
-          Serial.print("Requesting Image Data: ");
-          (Wire.requestFrom(11, 32, true)); // request 64 bytes from slave device #8
+          //Serial.print("Requesting Image Data: ");
+          (Wire.requestFrom(11, WireTransferSize, true)); // request 64 bytes from slave device #8
           delay(10);
           int i = 0;
-          //Serial.println("AV: " + String(Wire.available()));
+          long oldDIndex = dataIndex;
+          //Serial.print(Wire.available());
           while (Wire.available()) {
-            segment[dataIndex] = (uint8_t)Wire.read();
+            image[dataIndex] = (uint8_t)Wire.read();
+            i++;
             //Serial.println(segment[dataIndex]);
             if (dataIndex >= readSize) {
               break;
             }
             dataIndex++;
-            i++;
           }
           //printArray(segment, dataIndex);
-          Serial.println(dataIndex);
+          //Serial.println(dataIndex);
           //Serial.println("i: "+String(i));
+          Serial.print("[" + String(i) + "]");
+          if (dataIndex % DLSize < WireTransferSize) {
+            Serial.print("\n");
+          }
           if (dataIndex >= readSize - 1 && dataIndex > 16) { //if (i < 16) {
-            Serial.println("Last");
+            Serial.println("\nTransfer Complete");
             lastRead = true;
-            //printArray(segment, dataIndex);
+            //printArray(image, dataIndex);
             masterStatusHolder.RequestingImageStatus = 0;
-            masterStatusHolder.imageR.store(segment, dataIndex);
+            masterStatusHolder.imageR.store(image, dataIndex);
             dataIndex = 0;
 
             //Will reset Slave from ImageTransmit Mode
@@ -1833,7 +1887,7 @@ void loop() {
                 Requests = 0;
                 lastRead = false;
                 masterStatusHolder.NextState = NORMAL_OPS;//DOWNLINK_TESTING; ?
-                sendSCommand("104,1!");
+                sendSCommand("104,1!"); //TODO only send once?
                 Serial.println("");
                 masterStatusHolder.imageR.printRI();
                 //Stall();
@@ -2036,10 +2090,10 @@ void loop() {
 
       if (millis() - LastTimeTime >= TimeTime) {
         long t = millis();
-        Serial.print("["+String((millis() - LastTimeTime-TimeTime))+"]"); //Cycle Lag
+        Serial.print("[" + String((millis() - LastTimeTime - TimeTime)) + "]"); //Cycle Lag
         Serial.print("\n[System Time: " + String(t / (long)(60 * 60 * 1000)) + ":" +
-                     String(t / ((long)60 * 1000) % ((long)60 * 1000)) + ":" + 
-                     String((t / 1000) % ((long)1000) % 60) + "]");
+                     String(t / ((long)60 * 1000) % ((long)60 * 1000)) + ":" +
+                     String((t / 1000) % ((long)1000) % 60) + "][NORMAL OPS]");
         LastTimeTime = t;
       }
       break;

@@ -6,6 +6,7 @@
 
 /* Simple test program
 #include <stdio.h>
+#include <Stream.h>
 void main()
 {
     char* in = "amcewen";
@@ -18,7 +19,7 @@ void main()
 }
 */
 
-int b64_encode(const unsigned char* aInput, int aInputLen, unsigned char* aOutput, int aOutputLen)
+int b64_encode(const unsigned char* aInput, int aInputLen, char* aOutput, int aOutputLen)
 {
     // Work out if we've got enough space to encode the input
     // Every 6 bits of input becomes a byte of output

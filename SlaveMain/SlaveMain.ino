@@ -66,12 +66,15 @@ bool ADCS_exit = false;
 #define mediumImage VC0706_320x240
 #define largeImage VC0706_640x480
 long lastCamCheckTime = 0;
-int camCheckTime = 1000;
+int camCheckTime = 4070;
 
 //SD Card
 #define chipSelect 4
 #define DLSize 320
 bool SDActive = false;
+#define WireTransferSize 32
+static const char b64chars[] =
+  "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
 Adafruit_VC0706 cam = Adafruit_VC0706(&Serial1);
 
@@ -131,6 +134,7 @@ void printArray(uint8_t * arr, int s) {
   }
 }
 
+
 class floatTuple
 {
   public:
@@ -166,13 +170,55 @@ class RAMImageSlave {
       Serial.println("\nBinary Form:");
       printArray(a, photosize);
       Serial.println();
-      unsigned char output[photosize];
-      //char * input = a;
+      //      uint8_t b[DLSize];
+      //      for (int i = 0; i < sizeof(b); i++) {
+      //        b[i] = a[i];
+      //      }
+      Serial.println("Base64 Format:\n");
+      String b64 = Hash_base64(a, sizeof(a));
+      for (int i = 0; i < b64.length(); i++) {
+        Serial.print(b64[i]);
+        if (i % DLSize == 0 && i > 0) {
+          Serial.print("\n");
+        }
+      }
+      Serial.println("\n");
+    }
+    
+    String Hash_base64( uint8_t *in, int hashlength) {
+      int i, out;
+      char b64[(int)(hashlength * (8 / 6.0) + 1)]; // working byte array for sextets....
+      String base64;
+      for (i = 0, out = 0 ;; in += 3) { // octets to sextets
+        i++;
+        b64[out++] = b64chars[in[0] >> 2];
 
-//      b64_encode(a, photosize, output, photosize);
-//      for (int i = 0; i < photosize; i++) {
-//        Serial.print((char)output[i]);
-//      }
+        if (i >= hashlength ) { // single byte, so pad two times
+          b64[out++] = b64chars[((in[0] & 0x03) << 4) ];
+          b64[out++] =  '=';
+          b64[out++] =  '=';
+          break;
+        }
+
+        b64[out++] = b64chars[((in[0] & 0x03) << 4) | (in[1] >> 4)];
+        i++;
+        if (i >= hashlength ) { // two bytes, so we need to pad one time;
+          b64[out++] =  b64chars[((in[1] & 0x0f) << 2)] ;
+          b64[out++] =  '=';
+          break;
+        }
+        b64[out++] = b64chars[((in[1] & 0x0f) << 2) | (in[2] >> 6)];
+        b64[out++] =   b64chars[in[2] & 0x3f];
+
+        i++;
+        if (i >= hashlength ) { // three bytes, so we need no pad - wrap it;
+          break;
+        }
+        //Serial.println(out);
+      } // this should make b64 an array of sextets that is "out" in length
+      b64[out] = 0;
+      base64 = b64;
+      return (base64);
     }
 
     RAMImageSlave() {
@@ -859,7 +905,7 @@ void requestEvent() {
           int bytesSent = 0;
           //uint8_t buf1[16];
           int i;
-          for (i = 0; i < 32; i++) {
+          for (i = 0; i < WireTransferSize; i++) {
             bytesSent += Wire.write(StatusHolder.imageR.a[StatusHolder.imageR.currentIndex]);
             Serial.println(StatusHolder.imageR.a[StatusHolder.imageR.currentIndex]);
             StatusHolder.imageR.currentIndex++;
