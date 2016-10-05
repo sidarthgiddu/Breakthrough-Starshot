@@ -172,7 +172,7 @@ class RAMImageSlave {
 //      b64_encode(a, photosize, output, photosize);
 //      for (int i = 0; i < photosize; i++) {
 //        Serial.print((char)output[i]);
-      }
+//      }
     }
 
     RAMImageSlave() {
