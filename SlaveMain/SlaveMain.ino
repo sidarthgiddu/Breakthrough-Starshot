@@ -35,6 +35,7 @@ const int SDApin = 20; //I2C Data
 const int SCLpin = 21; //I2C Clock
 const int TempS = A0;  //Analog Temp Sensor
 const int LightS = A1; //Analog Light Sensor
+const int LED = 13; //Green LED
 
 const int CX1 = 22; //Coil X Input 1
 const int CX2 = 23; //Coil X Input 2
@@ -74,7 +75,7 @@ int camCheckTime = 4070;
 bool SDActive = false;
 #define WireTransferSize 32
 static const char b64chars[] =
-  "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+  "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"; //Remove before Flight //TODO
 
 Adafruit_VC0706 cam = Adafruit_VC0706(&Serial1);
 
@@ -182,9 +183,10 @@ class RAMImageSlave {
           Serial.print("\n");
         }
       }
+      //delete b64;
       Serial.println("\n");
     }
-    
+
     String Hash_base64( uint8_t *in, int hashlength) {
       int i, out;
       char b64[(int)(hashlength * (8 / 6.0) + 1)]; // working byte array for sextets....
@@ -264,13 +266,14 @@ class slaveStatus
     RAMImageSlave imageR;
     volatile int ITStatus;
     bool SDActive;
+    int Thermal; //1:Cold, 0:Normal, 2:Overheat
 
     //Iridium Network Status Attributes
 
     slaveStatus(float t = 0, int L = 0, int r = 0, int n = 0, int XD = 0, int XP = 0,
                 int YD = 0, int YP = 0, int ZD = 0, int ZP = 0,
                 floatTuple g = floatTuple(0, 0, 0), floatTuple M = floatTuple(0, 0, 0),
-                int IS = smallImage, long BD = 10 * 1000) {
+                int IS = smallImage, long BD = 15 * 1000) {
 
       imageR = RAMImageSlave();
       ITStatus = 0;
@@ -296,7 +299,8 @@ class slaveStatus
       durZ = 0;
       imageSize = IS;
       CameraBurst = false;
-      burstDuration = BD; //Default = 10s
+      burstDuration = BD; //Default = 15s
+      Thermal = 0;
     }
     void pwmWrite(int x, int y, int z) {
       durX = map(x, 0, 255, 0, cycleLength);
@@ -779,6 +783,11 @@ void PopCommands() {
         case (91): //Activate/Deactive ADCS (1=On,0=Off);
           StatusHolder.ADCS_Active = currentCommand[1];
           break;
+        case (92):
+          if (currentCommand[1] <= 2 && currentCommand[1] >= 0) {
+            StatusHolder.Thermal = (int)currentCommand[1];
+          }
+          break;
         case (101): //Start PhotoBurst
           StatusHolder.CameraBurst = true;
           StatusHolder.burstStart = millis();
@@ -960,29 +969,24 @@ void requestEvent() {
 
 }
 void initalizePinOut() {
-  const int MasterReset = A4; pinMode(MasterReset, OUTPUT); //Reset Master Core
+  pinMode(MasterReset, OUTPUT); //Reset Master Core
   digitalWrite(MasterReset, HIGH);
-  const int CamRx = 0; //Camera Serial into SCom
-  const int CamTx = 1; //Camera Serial out of SCom
-  const int SDApin = 20; //I2C Data
-  const int SCLpin = 21; //I2C Clock
-  const int TempS = A0; pinMode(TempS, INPUT); //Analog Temp Sensor
-  const int LightS = A1; pinMode(LightS, INPUT); //Analog Light Sensor
+  pinMode(TempS, INPUT); //Analog Temp Sensor
+  pinMode(LightS, INPUT); //Analog Light Sensor
+  pinMode(CX1, OUTPUT); //Coil X Input 1
+  pinMode(CX2, OUTPUT); //Coil X Input 2
+  pinMode(CY1, OUTPUT); //Coil Y Input 1
+  pinMode(CY2, OUTPUT); //Coil Y Input 2
+  pinMode(CZ1, OUTPUT); //Coil Z Input 1
+  pinMode(CZ2, OUTPUT); //Coil Z Input 2
 
-  const int CX1 = 22; pinMode(CX1, OUTPUT); //Coil X Input 1
-  const int CX2 = 23; pinMode(CX2, OUTPUT); //Coil X Input 2
-  const int CY1 = 5; pinMode(CY1, OUTPUT); //Coil Y Input 1
-  const int CY2 = 6; pinMode(CY2, OUTPUT); //Coil Y Input 2
-  const int CZ1 = 9; pinMode(CZ1, OUTPUT); //Coil Z Input 1
-  const int CZ2 = 10; pinMode(CZ2, OUTPUT); //Coil Z Input 2
+  pinMode(CX_PWM, OUTPUT); //Coil X PWM Control
+  pinMode(CY_PWM, OUTPUT); //Coil Y PWM Control
+  pinMode(CZ_PWM, OUTPUT); //Coil Z PWM Control
+  pinMode(CXY_Enable, OUTPUT); //Coil X and Y Enable
+  pinMode(CZ_Enable, OUTPUT); //Coil Z Enable
 
-  const int CX_PWM = 11; pinMode(CX_PWM, OUTPUT); //Coil X PWM Control
-  const int CY_PWM = 12; pinMode(CY_PWM, OUTPUT); //Coil Y PWM Control
-  const int CZ_PWM = 13; pinMode(CZ_PWM, OUTPUT); //Coil Z PWM Control
-  const int CXY_Enable = A5; pinMode(CXY_Enable, OUTPUT); //Coil X and Y Enable
-  const int CZ_Enable = 24; pinMode(CZ_Enable, OUTPUT); //Coil Z Enable
-
-  const int LED = 13;  pinMode(LED, OUTPUT);
+  pinMode(LED, OUTPUT);
 }
 
 void readSerialAdd2Buffer() {
@@ -1207,91 +1211,126 @@ void setup() {
 
 bool SoftwarePWM = false;
 bool disableT = false;
+bool thermalFlip = true;
 void loop() {
   readSerialAdd2Buffer();
   //Serial.println(SDActive);
   StatusHolder.updatePassive();
   StatusHolder.ADCS_Active = false;
   //Test ADCS
-  if (StatusHolder.ADCS_Active) {
-    if (millis() - lastADCSTime >= 2000) {
-      if (millis() - lastADCSTime >= 2100) {
-        //Serial.println("happy");
-        //runADCS(mData, gData, Kp, Kd);
-        Serial.println();
-        //Serial.println(StatusHolder.mag[0]);
-        //Serial.println(StatusHolder.mag[1]);
-        //Serial.println(StatusHolder.mag[2]);
-
-        runADCS(StatusHolder.mag, StatusHolder.gyro, Kp, Kd); //placeholders
-        //Serial.println("still happy");
-        //Serial.print("X axis: "); Serial.print(StatusHolder.CurXDir, 20); Serial.print(" "); Serial.println(StatusHolder.CurXPWM, 20);
-        //Serial.print("Y axis: "); Serial.print(StatusHolder.CurYDir, 20); Serial.print(" "); Serial.println(StatusHolder.CurYPWM, 20);
-        //Serial.print("Z axis: "); Serial.print(StatusHolder.CurZDir, 20); Serial.print(" "); Serial.println(StatusHolder.CurZPWM, 20);
+  switch (StatusHolder.Thermal) {
+    case (1): //Too Cold
+      if (millis() - lastADCSTime >= 2000) {
+        digitalWrite(CXY_Enable, HIGH);
+        digitalWrite(CZ_Enable, HIGH);
+        analogWrite(CX_PWM, 255);
+        analogWrite(CY_PWM, 255);
+        analogWrite(CZ_PWM, 255);
+        digitalWrite(CX1, thermalFlip);
+        digitalWrite(CX2, !thermalFlip);
+        digitalWrite(CY1, thermalFlip);
+        digitalWrite(CY2, !thermalFlip);
+        digitalWrite(CZ1, thermalFlip);
+        digitalWrite(CZ2, !thermalFlip);
+        thermalFlip = !thermalFlip;
         lastADCSTime = millis();
-        disableT = true;
-      } else {
-        //torquers off
-        analogWrite(CX_PWM, 0);
-        analogWrite(CY_PWM, 0);
-        analogWrite(CZ_PWM, 0);
-        if (disableT) {
-          floatTuple PWMvaluesForTorquers = floatTuple(0, 0, 0);
-          floatTuple PWMdirectionsForTorquers = floatTuple(0, 0, 0);
-          StatusHolder.updateTorquers(PWMdirectionsForTorquers, PWMvaluesForTorquers);
-          disableT = false;
-          //Request new Gyro Data
-        }
       }
-    }
+      break;
+    case (0):
+      if (StatusHolder.ADCS_Active) {
+        if (millis() - lastADCSTime >= 2000) {
+          if (millis() - lastADCSTime >= 2100) {
+            //Serial.println("happy");
+            //runADCS(mData, gData, Kp, Kd);
+            Serial.println();
+            //Serial.println(StatusHolder.mag[0]);
+            //Serial.println(StatusHolder.mag[1]);
+            //Serial.println(StatusHolder.mag[2]);
 
-    //SoftwarePWM
-    if (SoftwarePWM) {
-      unsigned long ms = micros();
-      if (startCycle) {
-        digitalWrite(A1, HIGH);
-        digitalWrite(A2, HIGH);
-        digitalWrite(A3, HIGH);
-        startCycle = false;
-        NextCycle = ms + cycleLength;
-        LastCycle = ms;
-        p1 = true;
-        p2 = true;
-        p3 = true;
+            runADCS(StatusHolder.mag, StatusHolder.gyro, Kp, Kd); //placeholders
+            //Serial.println("still happy");
+            //Serial.print("X axis: "); Serial.print(StatusHolder.CurXDir, 20); Serial.print(" "); Serial.println(StatusHolder.CurXPWM, 20);
+            //Serial.print("Y axis: "); Serial.print(StatusHolder.CurYDir, 20); Serial.print(" "); Serial.println(StatusHolder.CurYPWM, 20);
+            //Serial.print("Z axis: "); Serial.print(StatusHolder.CurZDir, 20); Serial.print(" "); Serial.println(StatusHolder.CurZPWM, 20);
+            lastADCSTime = millis();
+            disableT = true;
+          } else {
+            //torquers off
+            analogWrite(CX_PWM, 0);
+            analogWrite(CY_PWM, 0);
+            analogWrite(CZ_PWM, 0);
+            if (disableT) {
+              floatTuple PWMvaluesForTorquers = floatTuple(0, 0, 0);
+              floatTuple PWMdirectionsForTorquers = floatTuple(0, 0, 0);
+              StatusHolder.updateTorquers(PWMdirectionsForTorquers, PWMvaluesForTorquers);
+              disableT = false;
+              //Request new Gyro Data
+            }
+          }
+        }
+
+        //SoftwarePWM
+        //        if (SoftwarePWM) {
+        //          unsigned long ms = micros();
+        //          if (startCycle) {
+        //            digitalWrite(A1, HIGH);
+        //            digitalWrite(A2, HIGH);
+        //            digitalWrite(A3, HIGH);
+        //            startCycle = false;
+        //            NextCycle = ms + cycleLength;
+        //            LastCycle = ms;
+        //            p1 = true;
+        //            p2 = true;
+        //            p3 = true;
+        //          }
+        //          if (p1 && (ms - LastCycle >= StatusHolder.durX)) {
+        //            //Serial.println("Here");
+        //            digitalWrite(CX_PWM, LOW);
+        //            p1 = false;
+        //          }
+        //          if (p2 && (ms - LastCycle >= StatusHolder.durY)) {
+        //            digitalWrite(CY_PWM, LOW);
+        //            p2 = false;
+        //          }
+        //          if (p3 && (ms - LastCycle >= StatusHolder.durZ)) {
+        //            digitalWrite(CZ_PWM, LOW);
+        //            p3 = false;
+        //          }
+        //          if (ms > NextCycle) {
+        //            //Serial.print("End");
+        //            startCycle = true;
+        //          }
+        //        } else {
+        if (ADCS_exit) {
+          StatusHolder.CurXDir = 0;
+          StatusHolder.CurYDir = 0;
+          StatusHolder.CurZDir = 0;
+          digitalWrite(CX_PWM, LOW);
+          digitalWrite(CY_PWM, LOW);
+          digitalWrite(CZ_PWM, LOW);
+          ADCS_exit = false;
+          //          }
+        }
+      } else {
+        //ADCS Off
+        floatTuple PWMvaluesForTorquers = floatTuple(0, 0, 0);
+        floatTuple PWMdirectionsForTorquers = floatTuple(0, 0, 0);
+        StatusHolder.updateTorquers(PWMdirectionsForTorquers, PWMvaluesForTorquers);
       }
-      if (p1 && (ms - LastCycle >= StatusHolder.durX)) {
-        //Serial.println("Here");
-        digitalWrite(CX_PWM, LOW);
-        p1 = false;
-      }
-      if (p2 && (ms - LastCycle >= StatusHolder.durY)) {
-        digitalWrite(CY_PWM, LOW);
-        p2 = false;
-      }
-      if (p3 && (ms - LastCycle >= StatusHolder.durZ)) {
-        digitalWrite(CZ_PWM, LOW);
-        p3 = false;
-      }
-      if (ms > NextCycle) {
-        //Serial.print("End");
-        startCycle = true;
-      }
-    } else {
-      if (ADCS_exit) {
-        StatusHolder.CurXDir = 0;
-        StatusHolder.CurYDir = 0;
-        StatusHolder.CurZDir = 0;
-        digitalWrite(CX_PWM, LOW);
-        digitalWrite(CY_PWM, LOW);
-        digitalWrite(CZ_PWM, LOW);
-        ADCS_exit = false;
-      }
-    }
-  } else {
-    //ADCS Off
-    floatTuple PWMvaluesForTorquers = floatTuple(0, 0, 0);
-    floatTuple PWMdirectionsForTorquers = floatTuple(0, 0, 0);
-    StatusHolder.updateTorquers(PWMdirectionsForTorquers, PWMvaluesForTorquers);
+      break;
+    case (2): //Too Hot
+      digitalWrite(CXY_Enable, LOW);
+      digitalWrite(CZ_Enable, LOW);
+      digitalWrite(CX_PWM, LOW);
+      digitalWrite(CY_PWM, LOW);
+      digitalWrite(CZ_PWM, LOW);
+      digitalWrite(CX1, LOW);
+      digitalWrite(CX2, LOW);
+      digitalWrite(CY1, LOW);
+      digitalWrite(CY2, LOW);
+      digitalWrite(CZ1, LOW);
+      digitalWrite(CZ2, LOW);
+      break;
   }
 
   if (StatusHolder.CameraBurst) {

@@ -6,22 +6,24 @@
 
 
 //State Machine Definition
-#define DORMANT_CRUISE 1
-#define INITALIZATION  2
-#define INIT_SLEEP     3
-#define NORMAL_OPS     4
-#define ECLIPSE        5
-#define DEPLOY_ARMED   6
-#define DEPLOY_VERIF   7
-#define DEPLOY_DOWN_LK 8
-#define LOW_POWER      9
-#define SAFE_MODE     10
-#define IMAGE_REQUEST 11
+#define DORMANT_CRUISE  1
+#define INITALIZATION   2
+#define INIT_SLEEP      3
+#define NORMAL_OPS      4
+#define ECLIPSE         5
+#define DEPLOY_ARMED    6
+#define DEPLOY_VERIF    7
+#define DEPLOY_DOWN_LK  8
+#define LOW_POWER       9
+#define SAFE_MODE      10
+#define IMAGE_REQUEST  11
+#define IMAGE_DOWNLINK 12
 
 bool WireConnected = true;
 bool LED_NOT_DOOR = false;
 unsigned long LastTimeTime = 0;
 int TimeTime = 3071;
+bool ST = false;
 
 ////Constant Initialization
 unsigned long cruiseEnd = 30 * 60 * 1000;
@@ -44,6 +46,7 @@ unsigned long forceExitEclipseTime = 50 * 60 * 1000;
 unsigned long forceLPEclipseTime = 180 * 60 * 1000;
 unsigned long lastAccelTime;
 
+//Threshold Values
 int LightThreshold = 80; //0-100
 float LV_Threshold = 3.38; //Volts
 float HV_Threshold = 3.80; //Volts
@@ -53,6 +56,12 @@ int HT_Threshold = 60; //C
 float gyroThresholdX = 3; //dps
 float gyroThresholdY = 3; //dps
 float gyroThresholdZ = 3; //dps
+
+//Battery Test
+long LastBattCheck = 0;
+int BattCheckTime = 8100;
+long LastSolarCheck = 0;
+int SolarCheckTime = 9000;
 
 //RockBlock Test
 unsigned long lastRBCheck = 0;
@@ -72,20 +81,24 @@ int IMUrecords = 0;
 long recentSlaveCom = 0;
 long lastSComTime = 0;
 long lastSComAttempt = 0;
-int SComTime = 2107;
+int SComTime = 2237;
 unsigned long SlaveResetTimeOut = 30 * 1000;
 
 //ADCS Test
 unsigned long LastSpinCheckT = 0;
-unsigned long SpinCheckTime = 5 * 60 * 1000;
+unsigned long SpinCheckTime = 7010;
 float OmegaThreshold = 30; //Degrees per second
+
+//Thermal Test
+long LastThermalCheck = 0;
+int ThermalCheck = 6100;
 
 //Serial Command Test
 int popTime = 4000;
 unsigned long lastPopTime = 0;
 
 //RockBlock Test
-bool testRDL = true;
+bool testRDL = false;
 
 //Commanded Action Flags
 bool commandedSC = false;
@@ -119,6 +132,9 @@ const int DoorMagEnable = 11; //Allow Door Magnetorquer to work
 unsigned long lastCamTime = 0;
 int camCheckTime = 4112;
 #define WireTransferSize 32
+static const char b64chars[] =
+  "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"; //Remove before Flight //TODO
+
 
 bool DA_Initialize;
 
@@ -215,21 +231,21 @@ class RAMImage {
       printArray(a14, sizeArray[14]);
       printArray(a15, sizeArray[15]);
 
-      Serial.println("Base64 Format:\n");
-      String b64 = Hash_base64(a, sizeof(a));
-      for (int i = 0; i < b64.length(); i++) {
-        Serial.print(b64[i]);
-        if (i % DLSize == 0 && i > 0) {
-          Serial.print("\n");
-        }
-      }
+      //      Serial.println("Base64 Format:\n");
+      //      String b64 = Hash_base64(a, sizeof(a));
+      //      for (int i = 0; i < b64.length(); i++) {
+      //        Serial.print(b64[i]);
+      //        if (i % DLSize == 0 && i > 0) {
+      //          Serial.print("\n");
+      //        }
+      //      }
       Serial.println("\n");
     }
 
     RAMImage() {
       sizeArray[16] = {0};
       finalIndex = 0;
-      Filename = "";
+      Filename = "N/A";
 
       a0[DLSize] = {0};
       a1[DLSize] = {0};
@@ -578,12 +594,13 @@ class masterStatus {
     //Sensor Variables
     float Battery; // max 4.2V min 2.75V
     float BatteryAcc; //Accumulator
-    float SolarXPlus; //Current in Amps
-    float SolarXMinus; //Current in Amps
-    float SolarYPlus; //Current in Amps
-    float SolarYMinus; //Current in Amps
-    float SolarZPlus; //Current in Amps
-    float SolarZMinus; //Current in Amps
+    //    float SolarXPlus; //Current in Amps
+    //    float SolarXMinus; //Current in Amps
+    //    float SolarYPlus; //Current in Amps
+    //    float SolarYMinus; //Current in Amps
+    //    float SolarZPlus; //Current in Amps
+    //    float SolarZMinus; //Current in Amps
+    float Solar; //Single Solar Input
     int DoorSense; //0 = Door Closed, 1 = Door Open
     float LightSense; //Sent From Slave
     float AnalogTemp; //Sent From Slave
@@ -596,11 +613,6 @@ class masterStatus {
     //Deployment Variables
     int missionStatus; //0=incomplete, 1=success, 2=failure
     int deploySetting; //0=DoorSensor OR Light, 1 = Just Light, 2 = Just DoorSensor
-    float * IMUData[3]; //TODO
-    float * LIGHTData; //TODO
-    float * AccelData[3]; //TODO
-    int dataIndex; //TODO
-    int accelIndex; //TODO
 
     //ADCS State Variables
     int MResets; //Number of Times Master has been reset
@@ -643,12 +655,13 @@ class masterStatus {
       ImuTemp = 0;
       Battery = 3.8;
       BatteryAcc = 0;
-      SolarXPlus = 0;
-      SolarXMinus = 0;
-      SolarYPlus = 0;
-      SolarYMinus = 0;
-      SolarZPlus = 0;
-      SolarZMinus = 0;
+      //      SolarXPlus = 0;
+      //      SolarXMinus = 0;
+      //      SolarYPlus = 0;
+      //      SolarYMinus = 0;
+      //      SolarZPlus = 0;
+      //      SolarZMinus = 0;
+      Solar = 0;
       DoorSense = 0;
       LightSense = 0;
       AnalogTemp = 0;
@@ -683,10 +696,6 @@ class masterStatus {
       CurZDir = 0;
       CurZPWM = 0;
 
-      IMUData[3][360] = {0};
-      LIGHTData[360] = {0};
-      dataIndex = 0;
-      accelIndex = 0;
     }
     void updateSensors() {
       //Update Internal Sensor Variables
@@ -698,15 +707,16 @@ class masterStatus {
         MagAcc[0] += M.x; MagAcc[1] += M.y; MagAcc[2] += M.z;
         TempAcc += getImuTempData(imu);
       }
-      SolarXPlus = getCurrentAmp(1); //X+
-      SolarXMinus = getCurrentAmp(2); //X-
-      SolarYPlus = getCurrentAmp(3); //Y+
-      SolarYMinus = getCurrentAmp(4); //Y-
-      SolarZPlus = getCurrentAmp(5); //Z+
-      SolarZMinus = getCurrentAmp(6); //Z-
+      //      SolarXPlus = getCurrentAmp(1); //X+
+      //      SolarXMinus = getCurrentAmp(2); //X-
+      //      SolarYPlus = getCurrentAmp(3); //Y+
+      //      SolarYMinus = getCurrentAmp(4); //Y-
+      //      SolarZPlus = getCurrentAmp(5); //Z+
+      //      SolarZMinus = getCurrentAmp(6); //Z-
+      Solar = getCurrentAmp(1); //1 Current Sensor
 
       //Serial.println(analogRead(BatteryPin));
-      BatteryAcc += 2 * fmap((float)analogRead(BatteryPin), 0.0, 1023.0, 0.0, 3.3); //TODO x2??
+      BatteryAcc += 2 * fmap((float)analogRead(BatteryPin), 0.0, 1023.0, 0.0, 3.3);
       //Serial.println(BatteryAcc);
       DoorSense = digitalRead(DoorSensePin);
     }
@@ -722,9 +732,10 @@ class masterStatus {
       output += "IT:" + String(ImuTemp) + ",";
       output += "AT:" + String(AnalogTemp) + ",";
       output += "B:" + String(Battery) + ",";
-      output += "SX+:" + String(SolarXPlus) + ",SX-:" + String(SolarXMinus) +
-                ",SY+:" + String(SolarYPlus) + ",SY-:" + String(SolarYMinus) +
-                ",SZ+:" + String(SolarZPlus) + ",SZ-:" + String(SolarZMinus) + ",";
+      //      output += "SX+:" + String(SolarXPlus) + ",SX-:" + String(SolarXMinus) +
+      //                ",SY+:" + String(SolarYPlus) + ",SY-:" + String(SolarYMinus) +
+      //                ",SZ+:" + String(SolarZPlus) + ",SZ-:" + String(SolarZMinus) + ",";
+      output += "SL+:" + String(Solar) + ",";
       output += "DS:" + String(DoorSense) + ",";
       output += "LS:" + String(LightSense) + ",";
       output += "nP:" + String(numPhotos) + ",";
@@ -769,18 +780,17 @@ class masterStatus {
       OutputString += chop (constrain(roundDecimal(ImuTemp, 0), -60, 90), 0) + ",";
       OutputString += chop (constrain(roundDecimal(AnalogTemp, 0), -60, 90), 0) + ",";
       OutputString += chop (constrain(roundDecimal(Battery, 2), 2.75, 4.2), 2) + ",";
-      OutputString += chop (constrain(roundDecimal(1000 * SolarXPlus, 0), 0, 300), 0) + ",";
-      OutputString += chop (constrain(roundDecimal(1000 * SolarXMinus, 0), 0, 300), 0) + ",";
-      OutputString += chop (constrain(roundDecimal(1000 * SolarYPlus, 0), 0, 300), 0) + ",";
-      OutputString += chop (constrain(roundDecimal(1000 * SolarYMinus, 0), 0, 300), 0) + ",";
-      OutputString += chop (constrain(roundDecimal(1000 * SolarZPlus, 0), 0, 300), 0) + ",";
-      OutputString += chop (constrain(roundDecimal(1000 * SolarZMinus, 0), 0, 300), 0) + ",";
+      //      OutputString += chop (constrain(roundDecimal(1000 * SolarXPlus, 0), 0, 300), 0) + ",";
+      //      OutputString += chop (constrain(roundDecimal(1000 * SolarXMinus, 0), 0, 300), 0) + ",";
+      //      OutputString += chop (constrain(roundDecimal(1000 * SolarYPlus, 0), 0, 300), 0) + ",";
+      //      OutputString += chop (constrain(roundDecimal(1000 * SolarYMinus, 0), 0, 300), 0) + ",";
+      //      OutputString += chop (constrain(roundDecimal(1000 * SolarZPlus, 0), 0, 300), 0) + ",";
+      //      OutputString += chop (constrain(roundDecimal(1000 * SolarZMinus, 0), 0, 300), 0) + ",";
+      OutputString += chop (constrain(roundDecimal(1000 * Solar, 0), 0, 300), 0) + ",";
       OutputString += chop (constrain(roundDecimal(DoorSense, 2), 0, 4), 2) + ",";
       OutputString += chop (constrain(roundDecimal(LightSense, 0), 0, 100), 0) + ",";
       OutputString += chop (constrain(roundDecimal(numPhotos, 0), 0, 99), 0) + ",";
-      //      String(hardwareAvTable[0]);
-      //      String(SlaveWorking);//TODO
-      //      String(Resets);
+      //      String(hardwareAvTable[0]);//TODO
       //      String(ADCS_Active);
       OutputString += chop (constrain(roundDecimal(CurXDir, 0), -1, 1), 0) + ",";
       OutputString += chop (constrain(roundDecimal(CurXPWM, 2), 0, 4), 2) + ",";
@@ -828,11 +838,11 @@ void initalizePinOut() {
   pinMode(RB_RI, INPUT);
   pinMode(RB_RTS, INPUT);
   pinMode(RB_CTS, INPUT); pinMode(SolarXPlusPin, INPUT); //Solar Current X+
-  pinMode(SolarXMinusPin, INPUT); //Solar Current X-
-  pinMode(SolarYPlusPin, INPUT); //Solar Current Y+
-  pinMode(SolarYMinusPin, INPUT); //Solar Current Y-
-  pinMode(SolarZPlusPin, INPUT); //Solar Current Z+
-  pinMode(SolarZMinusPin, INPUT); //Solar Current Z-
+  //  pinMode(SolarXMinusPin, INPUT); //Solar Current X-
+  //  pinMode(SolarYPlusPin, INPUT); //Solar Current Y+
+  //  pinMode(SolarYMinusPin, INPUT); //Solar Current Y-
+  //  pinMode(SolarZPlusPin, INPUT); //Solar Current Z+
+  //  pinMode(SolarZMinusPin, INPUT); //Solar Current Z-
   pinMode(SolarZMinusPin, INPUT); //Slave Fault Handing (via Hard Reset)
   pinMode(DoorMagEnable, OUTPUT); //Allow Door Magnetorquer to work
 }
@@ -841,44 +851,45 @@ float getCurrentAmp(int panel) {
   //Returns Amperage of current sensors for panel # <panel>
   //1v/A @10kOhm 8.2V/A @82kOhm
   float current;
-  switch (panel) {
-    case 1:
-      if (masterStatusHolder.hardwareAvTable[1]) {
-        current = analogRead(SolarXPlusPin);
-      } else {
-        current = 0;
-      } break;
-    case 2:
-      if (masterStatusHolder.hardwareAvTable[2]) {
-        current = analogRead(SolarXMinusPin);
-      } else {
-        current = 0;
-      } break;
-    case 3:
-      if (masterStatusHolder.hardwareAvTable[3]) {
-        current = analogRead(SolarYPlusPin);
-      } else {
-        current = 0;
-      } break;
-    case 4:
-      if (masterStatusHolder.hardwareAvTable[4]) {
-        current = analogRead(SolarYMinusPin);
-      } else {
-        current = 0;
-      } break;
-    case 5:
-      if (masterStatusHolder.hardwareAvTable[5]) {
-        current = analogRead(SolarZPlusPin);
-      } else {
-        current = 0;
-      } break;
-    case 6:
-      if (masterStatusHolder.hardwareAvTable[6]) {
-        current = analogRead(SolarZMinusPin);
-      } else {
-        current = 0;
-      } break;
-  }
+  //  switch (panel) {
+  //    case 1:
+  //      if (masterStatusHolder.hardwareAvTable[1]) {
+  //        current = analogRead(SolarXPlusPin);
+  //      } else {
+  //        current = 0;
+  //      } break;
+  //    case 2:
+  //      if (masterStatusHolder.hardwareAvTable[2]) {
+  //        current = analogRead(SolarXMinusPin);
+  //      } else {
+  //        current = 0;
+  //      } break;
+  //    case 3:
+  //      if (masterStatusHolder.hardwareAvTable[3]) {
+  //        current = analogRead(SolarYPlusPin);
+  //      } else {
+  //        current = 0;
+  //      } break;
+  //    case 4:
+  //      if (masterStatusHolder.hardwareAvTable[4]) {
+  //        current = analogRead(SolarYMinusPin);
+  //      } else {
+  //        current = 0;
+  //      } break;
+  //    case 5:
+  //      if (masterStatusHolder.hardwareAvTable[5]) {
+  //        current = analogRead(SolarZPlusPin);
+  //      } else {
+  //        current = 0;
+  //      } break;
+  //    case 6:
+  //      if (masterStatusHolder.hardwareAvTable[6]) {
+  //        current = analogRead(SolarZMinusPin);
+  //      } else {
+  //        current = 0;
+  //      } break;
+  //  }
+  current = analogRead(SolarZMinusPin);
   current = fmap((float)current, 0.0, 1023.0, 0, .40244); //3.3V=.825A
   return current;
 }
@@ -886,9 +897,10 @@ float getCurrentAmp(int panel) {
 float getTotalAmperage() {
   //Check the amps from each solar panel and returns total amperage
   float TotalCurrent = 0;
-  for (int i = 1 ; i <= 6; i++) {
-    TotalCurrent += getCurrentAmp(i);
-  }
+  //  for (int i = 1 ; i <= 6; i++) {
+  //    TotalCurrent += getCurrentAmp(i);
+  //  }
+  getCurrentAmp(1); //1 Current Sensor
   return TotalCurrent;
 }
 
@@ -1041,7 +1053,8 @@ boolean isInputValid(String input) {
 
 void popCommands() {
   //Process all the Incoming Commands
-  while (cBuf.openSpot > 0) { //TODO ManTimeout
+  long start = millis();
+  while (cBuf.openSpot > 0 && millis()-start < manualTimeout) { 
     if (cBuf.openSpot > 0) {
       //Serial.println (cBuf.openSpot - 1);
       int currentCommand[2] = {cBuf.commandStack[cBuf.openSpot - 1][0], cBuf.commandStack[cBuf.openSpot - 1][1]};
@@ -1082,12 +1095,29 @@ void popCommands() {
           digitalWrite(DoorTrig, HIGH);
           Serial.println(F("\nForce Deploy"));
           break;
-        case (97): { //Check System Time
-            long t = millis();
-            Serial.println("<<System Time: " + String(t % (long)(1000 * 60 * 60)) + ":" +
-                           String(t % (long)60000) + ":" + String(t % (long)1000) + ">>");
-            break;
+        case (97): //Remove before flight //TODO
+          testRDL = (bool)currentCommand[1];
+          if (testRDL) {
+            Serial.println("\nRoutine Downlinks Activated");
+          } else {
+            Serial.println("\nRoutine Downlinks Deactivated");
           }
+          break;
+        case (98): //Begin Image Downlink
+          if (masterStatusHolder.imageR.Filename != F("N/A")) {
+            Serial.println("\nEntering Image Downlink");
+            masterStatusHolder.NextState = IMAGE_DOWNLINK;
+          } else {
+            Serial.println("\nNo Image Loaded");
+          }
+          break;
+        case (99): //Force Full Sleep to Reduce Overheating
+          Serial.println("\nForced Thermal Sleep for " + String(currentCommand[1]) + " minutes");
+          sendSCommand("92,2!");
+          digitalWrite(RBSleep, LOW);
+          delay(60000 * currentCommand[1]);
+          digitalWrite(RBSleep, HIGH);
+          break;
         case (51): //Take Photos
           sendSCommand("101,1!");
           break;
@@ -1701,7 +1731,7 @@ int routineDownlink(String DLS) {
     delay(400);
     if (rockOKParse()) {
       masterStatusHolder.MessageStaged = true;
-      masterStatusHolder.MOStatus = 5; //Reset so it can go to 0 when success
+      masterStatusHolder.MOStatus = 5; //Reset so it can go to 0 when success (5 means nothing)
       Serial.print(F("\nRDL Staged for Downlink: "));
       masterStatusHolder.RBCheckType = 1; //Send Staged Message
       return 0;
@@ -1822,8 +1852,7 @@ void setup() {
 
   initalizePinOut();
   digitalWrite(SlaveReset, HIGH); //Enable Slave
-  delay(1000);
-  Stall();
+  delay(100);
 
   cBuf = commandBuffer();
   masterStatusHolder = masterStatus();
@@ -1848,11 +1877,8 @@ void setup() {
 //Testing Variables
 bool downlinkJustStaged = false;
 //bool ImageDownlink_Active = true;
-const int DOWNLINK_TESTING = 999;
-//const int IMAGE_REQUEST = 888;
 int Requests = 0;
 long linkTime = 0;
-int trys = 0;
 
 void loop() {
   readSerialAdd2Buffer(); //Testing Command Input
@@ -1911,48 +1937,57 @@ void loop() {
         break;
       }
 
-    case (DOWNLINK_TESTING):
+    case (IMAGE_DOWNLINK):
       if (masterStatusHolder.currentSegment <= masterStatusHolder.imageR.finalIndex) {
-        if (masterStatusHolder.MOStatus == 0) { //|| masterStatusHolder.currentSegment == 0) {
+        if (masterStatusHolder.MOStatus == 0 || masterStatusHolder.currentSegment == 0) {
           //Attempt Segment Downlink
+          if (masterStatusHolder.currentSegment != 0) {
+            Serial.println("\nSegment Downlink Successful");
+          }
+          masterStatusHolder.currentSegment++;
+
           if (!masterStatusHolder.AttemptingLink) {
             int error = downlinkSegment(masterStatusHolder.currentSegment);
             if (error == 0) {
               //Success
-              masterStatusHolder.MOStatus = 13; //??? TODO
+              masterStatusHolder.MOStatus = 5; //??? TODO
               downlinkJustStaged = true;
-              Serial.println("Segment " + String(masterStatusHolder.currentSegment) + " Staged");
+              Serial.println("\nSegment " + String(masterStatusHolder.currentSegment) +
+                             " Of " + String(masterStatusHolder.imageR.finalIndex + 1) + " Staged");
             } else {
               //Fail
-              Serial.println("Error: " + String(error));
+              Serial.println("\nError Staging Image: " + String(error));
+              masterStatusHolder.currentSegment--;
             }
           } else {
-            Serial.print("Still Attempting Link: ");
-            Serial.println(linkTime / 1000.0);
-            delay(50);
+            //            Serial.print("<R2>");
+            //            Serial.print("<L:" + String((linkTime - millis()) / 1000) + ">");
+            //            delay(1500); //Wait to check
+            //Waiting for link???
           }
         } else {
           if (downlinkJustStaged) {
             //SBDIX Call after SBDWB
-            Serial.print("SBDIX Sent");
+            Serial.println("\nSBDIX Sent");
             sendSBDIX(true); //Attempting Link is true after this
-
             linkTime = millis();
-            //downlinkJustStaged = true;
             downlinkJustStaged = false;
           }
-          if (trys % 50 == 0) {
-            Serial.println("");
-          }
-          trys++;
 
-          RBData(); //Can Reset MOStatus to 0
-          delay(200);
+          if (millis() - lastRBCheck > 1500) {
+            Serial.print("<R2>");
+            Serial.print("<L:" + String((linkTime - millis()) / 1000) + ">");
+            RBData(); //Can Reset MOStatus to 0
+            lastRBCheck = millis();
+          }
         }
       } else {
         masterStatusHolder.NextState = NORMAL_OPS;
       }
       //TODO Timeout
+      //if(timeout){
+      //    masterStatusHolder.currentSegment--
+      //}
       break;
 
     case (NORMAL_OPS):
@@ -1960,7 +1995,7 @@ void loop() {
       //Collect Sensor Data
       SensorDataCollect();
 
-      //RockBlock Communication
+      //RockBlock Communication //TODO RBSleep -> LOW
       if (millis() - lastRBCheck >= RBCheckTime) {
         switch (masterStatusHolder.RBCheckType) {
           case (0): //Ping RockBlock to ensure Unit Functionality
@@ -1969,7 +2004,7 @@ void loop() {
               Serial1.println("AT\r");
               Serial.print(String(rockOKParse()) + ">");
             } else {
-              Serial.print("<R2>");
+              Serial.print("<R2>"); //Waiting for SBDIX to return
             }
             break;
           case (1): //Ping Iridium and Check for Messages, Send if any are outgoing
@@ -2002,11 +2037,11 @@ void loop() {
 
       //Routine Downlinks
       if (millis() - lastDLTime >= DLTime || commandedDL) {
-        String DLSshort = masterStatusHolder.OutputString();
         if (testRDL) {
+          String DLSshort = masterStatusHolder.OutputString();
           routineDownlink(DLSshort);
+          Serial.println("\n" + masterStatusHolder.toString());
         }
-        Serial.println("\n" + masterStatusHolder.toString());
         lastDLTime = millis();
       }
 
@@ -2046,8 +2081,9 @@ void loop() {
 
       //ADCS
       if (millis() - LastSpinCheckT > SpinCheckTime) {
-        Serial.println("Here3");
-        LastSpinCheckT = millis();
+        Serial.print("<G:" + String(masterStatusHolder.Gyro[0]) + "|" +
+                     String(masterStatusHolder.Gyro[1]) + "|" +
+                     String(masterStatusHolder.Gyro[2]) + ">");
         if (masterStatusHolder.Gyro[0] > OmegaThreshold || masterStatusHolder.Gyro[1] > OmegaThreshold) {
           sendSCommand("91,1!"); //Activate Torquers
           masterStatusHolder.ADCS_Active = true;
@@ -2055,47 +2091,62 @@ void loop() {
           sendSCommand("91,0!"); //Deactivate Torquers
           masterStatusHolder.ADCS_Active = false;
         }
+        LastSpinCheckT = millis();
       }
 
       //Eclipse Detection
-      //        if (getTotalAmperage() < EclipseAmp_Threshold) {
-      //          masterStatusHolder.NextState = ECLIPSE;
-      //          //torquers off
-      //          eclipseEntry = millis();
-      //        }
-      //        //Low Power Detection
-      //        if (masterStatusHolder.Battery * 2 < LV_Threshold) {
-      //          masterStatusHolder.NextState = LOW_POWER;
-      //          lowPowerEntry = millis();
-      //        }
-
-      //Blinker for Testing
-      if (millis() - ledLastTime >= 100) {
-        if (LED_NOT_DOOR) {
-          //unsigned long t = millis() - ledLastTime;
-          if (ledState == LOW) {
-            ledState = HIGH;
-          } else {
-            ledState = LOW;
-          }
-          digitalWrite(13, ledState);
+      if (millis() - LastSolarCheck > SolarCheckTime) {
+        float s = getTotalAmperage();
+        Serial.print("<S:"+String(s)+">");
+        if (s < EclipseAmp_Threshold) {
+          //masterStatusHolder.NextState = ECLIPSE; //TODO
+          sendSCommand("91,0!");
+          eclipseEntry = millis();
         }
-        Serial.print(F("."));
-        //        Serial.print("Running: ");
-        //        Serial.print(t);
-        //        Serial.print(" -> Cycle Stretch of: ");
-        //        Serial.println(t - 100);
-        ledLastTime = millis();
       }
 
-      if (millis() - LastTimeTime >= TimeTime) {
-        long t = millis();
-        Serial.print("[" + String((millis() - LastTimeTime - TimeTime)) + "]"); //Cycle Lag
-        Serial.print("\n[System Time: " + String(t / (long)(60 * 60 * 1000)) + ":" +
-                     String(t / ((long)60 * 1000) % ((long)60 * 1000)) + ":" +
-                     String((t / 1000) % ((long)1000) % 60) + "][NORMAL OPS]");
-        LastTimeTime = t;
+      //Low Power Detection
+      if (millis() - LastBattCheck > BattCheckTime) {
+        Serial.print("<B:"+String(masterStatusHolder.Battery * 2)+">");
+        if (masterStatusHolder.Battery <= LV_Threshold) {
+          //masterStatusHolder.NextState = LOW_POWER; //TODO
+          lowPowerEntry = millis();
+        }
       }
+
+      //Thermal Protection/Control //TODO put in other Ops?
+      if (millis() - LastThermalCheck > ThermalCheck) {
+        if (masterStatusHolder.AnalogTemp > HT_Threshold) {
+          Serial.println("\n<Warning!> Overheat Threshold Passed");
+          sendSCommand("92,2!");
+        } else if (masterStatusHolder.AnalogTemp < LT_Threshold) {
+          Serial.println("\n<Warning!> Low Temp Threshold Passed");
+          sendSCommand("92,1!");
+        } else {
+          sendSCommand("92,0!");
+        }
+        Serial.print("<T" + String((int)masterStatusHolder.AnalogTemp) + ">");
+      }
+
+      //      //Blinker for Testing
+      //      if (millis() - ledLastTime >= 100) {
+      //        if (LED_NOT_DOOR) {
+      //          //unsigned long t = millis() - ledLastTime;
+      //          if (ledState == LOW) {
+      //            ledState = HIGH;
+      //          } else {
+      //            ledState = LOW;
+      //          }
+      //          digitalWrite(13, ledState);
+      //        }
+      //        Serial.print(F("."));
+      //        //        Serial.print("Running: ");
+      //        //        Serial.print(t);
+      //        //        Serial.print(" -> Cycle Stretch of: ");
+      //        //        Serial.println(t - 100);
+      //        ledLastTime = millis();
+      //      }
+
       break;
 
     case (DORMANT_CRUISE):
@@ -2180,9 +2231,6 @@ void loop() {
           }
         }
         Serial.print("<" + String(digitalRead(DoorSensePin)) + "," + String(masterStatusHolder.LightSense) + ">");
-        if (cycle % 29 == 0) {
-          Serial.println(""); //??? Display Spacing?
-        }
         if (DA_Initialize) {
           //if (true){
           digitalWrite(DoorTrig, HIGH); //Activate Nichrome
@@ -2234,9 +2282,6 @@ void loop() {
 
     case (DEPLOY_VERIF):
       Serial.print("$");
-      if (cycle % 100 == 0) {
-        Serial.println("");
-      }
       delay(10);
       //bool SlaveResponse = requestFromSlave(); //Need inputisvalid
       lastAccelTime = millis();
@@ -2265,13 +2310,40 @@ void loop() {
   masterStatusHolder.State = masterStatusHolder.NextState;
   //Testing Iterators
   cycle++;
-  //Serial.print("C : ");
-  //Serial.println(cycle);
-  //  if (masterStatusHolder.State == NORMAL_OPS && (millis() % (long)60000 == 0)) {
-  //    long t = millis();
-  //    Serial.println("<<System Time: " + String(t % (long)60 * 60000) + ":" +
-  //                   String(t % (long)60000) + ":" + String(t % (long)1000) + ">>");
-  //  }
+  //Blinker for Testing
+  if (millis() - ledLastTime >= 100) {
+    if (LED_NOT_DOOR) {
+      //unsigned long t = millis() - ledLastTime;
+      if (ledState == LOW) {
+        ledState = HIGH;
+      } else {
+        ledState = LOW;
+      }
+      digitalWrite(13, ledState);
+    }
+    Serial.print(F("."));
+    //        Serial.print("Running: ");
+    //        Serial.print(t);
+    //        Serial.print(" -> Cycle Stretch of: ");
+    //        Serial.println(t - 100);
+    ledLastTime = millis();
+  }
+
+  if (cycle % 600 == 0) {
+    ST = true;
+  }
+  if (ST && ((millis() - LastTimeTime) > 4000)) { //Prevent Screen Spam
+    long t = millis();
+    Serial.print("[" + String((millis() - LastTimeTime) / 1000.0) + "]"); //Cycle Lag
+    Serial.print("\n[System Time: " + String(t / (long)(60 * 60 * 1000)) + ":" +
+                 String(t / ((long)60 * 1000) % ((long)60 * 1000)) + ":" +
+                 String((t / 1000) % ((long)1000) % 60) +
+                 "][" + String(masterStatusHolder.State) + "]");
+    LastTimeTime = t;
+    ST = false;
+    cycle = 0;
+  }
+
 }
 
 
