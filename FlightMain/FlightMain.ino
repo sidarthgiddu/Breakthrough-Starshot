@@ -6,20 +6,24 @@
 
 
 //State Machine Definition
-#define DORMANT_CRUISE 1
-#define INITALIZATION  2
-#define INIT_SLEEP     3
-#define NORMAL_OPS     4
-#define ECLIPSE        5
-#define DEPLOY_ARMED   6
-#define DEPLOY_VERIF   7
-#define DEPLOY_DOWN_LK 8
-#define LOW_POWER      9
-#define SAFE_MODE     10
-#define IMAGE_REQUEST 11
+#define DORMANT_CRUISE  1
+#define INITALIZATION   2
+#define INIT_SLEEP      3
+#define NORMAL_OPS      4
+#define ECLIPSE         5
+#define DEPLOY_ARMED    6
+#define DEPLOY_VERIF    7
+#define DEPLOY_DOWN_LK  8
+#define LOW_POWER       9
+#define SAFE_MODE      10
+#define IMAGE_REQUEST  11
+#define IMAGE_DOWNLINK 12
 
 bool WireConnected = true;
 bool LED_NOT_DOOR = false;
+unsigned long LastTimeTime = 0;
+int TimeTime = 3071;
+bool ST = false;
 
 ////Constant Initialization
 unsigned long cruiseEnd = 30 * 60 * 1000;
@@ -42,6 +46,7 @@ unsigned long forceExitEclipseTime = 50 * 60 * 1000;
 unsigned long forceLPEclipseTime = 180 * 60 * 1000;
 unsigned long lastAccelTime;
 
+//Threshold Values
 int LightThreshold = 80; //0-100
 float LV_Threshold = 3.38; //Volts
 float HV_Threshold = 3.80; //Volts
@@ -52,11 +57,17 @@ float gyroThresholdX = 3; //dps
 float gyroThresholdY = 3; //dps
 float gyroThresholdZ = 3; //dps
 
+//Battery Test
+long LastBattCheck = 0;
+int BattCheckTime = 8100;
+long LastSolarCheck = 0;
+int SolarCheckTime = 9000;
+
 //RockBlock Test
 unsigned long lastRBCheck = 0;
 long RBCheckTime = 6000;
 unsigned int RBPings = 0;
-unsigned long DLTime = 6137;
+unsigned long DLTime = 60 * 1000;
 unsigned long lastDLTime = 0;
 bool RBPingOut = false;
 
@@ -70,19 +81,24 @@ int IMUrecords = 0;
 long recentSlaveCom = 0;
 long lastSComTime = 0;
 long lastSComAttempt = 0;
-int SComTime = 2000;
+int SComTime = 2237;
 unsigned long SlaveResetTimeOut = 30 * 1000;
 
 //ADCS Test
 unsigned long LastSpinCheckT = 0;
-unsigned long SpinCheckTime = 5 * 60 * 1000;
+unsigned long SpinCheckTime = 7010;
 float OmegaThreshold = 30; //Degrees per second
+
+//Thermal Test
+long LastThermalCheck = 0;
+int ThermalCheck = 6100;
 
 //Serial Command Test
 int popTime = 4000;
 unsigned long lastPopTime = 0;
 
 //RockBlock Test
+bool testRDL = false;
 
 //Commanded Action Flags
 bool commandedSC = false;
@@ -114,6 +130,11 @@ const int DoorMagEnable = 11; //Allow Door Magnetorquer to work
 #define chipSelect 4
 #define DLSize 320
 unsigned long lastCamTime = 0;
+int camCheckTime = 4112;
+#define WireTransferSize 32
+static const char b64chars[] =
+  "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"; //Remove before Flight //TODO
+
 
 bool DA_Initialize;
 
@@ -335,12 +356,22 @@ class RAMImage {
       printArray(a13, sizeArray[13]);
       printArray(a14, sizeArray[14]);
       printArray(a15, sizeArray[15]);
+
+      //      Serial.println("Base64 Format:\n");
+      //      String b64 = Hash_base64(a, sizeof(a));
+      //      for (int i = 0; i < b64.length(); i++) {
+      //        Serial.print(b64[i]);
+      //        if (i % DLSize == 0 && i > 0) {
+      //          Serial.print("\n");
+      //        }
+      //      }
+      Serial.println("\n");
     }
 
     RAMImage() {
       sizeArray[16] = {0};
       finalIndex = 0;
-      Filename = "";
+      Filename = "N/A";
 
       a0[DLSize] = {0};
       a1[DLSize] = {0};
@@ -360,7 +391,41 @@ class RAMImage {
       a15[DLSize] = {0};
       //Blank
     }
+    String Hash_base64( uint8_t *in, int hashlength) {
+      int i, out;
+      char b64[(int)(hashlength * (8 / 6.0) + 1)]; // working byte array for sextets....
+      String base64;
+      for (i = 0, out = 0 ;; in += 3) { // octets to sextets
+        i++;
+        b64[out++] = b64chars[in[0] >> 2];
 
+        if (i >= hashlength ) { // single byte, so pad two times
+          b64[out++] = b64chars[((in[0] & 0x03) << 4) ];
+          b64[out++] =  '=';
+          b64[out++] =  '=';
+          break;
+        }
+
+        b64[out++] = b64chars[((in[0] & 0x03) << 4) | (in[1] >> 4)];
+        i++;
+        if (i >= hashlength ) { // two bytes, so we need to pad one time;
+          b64[out++] =  b64chars[((in[1] & 0x0f) << 2)] ;
+          b64[out++] =  '=';
+          break;
+        }
+        b64[out++] = b64chars[((in[1] & 0x0f) << 2) | (in[2] >> 6)];
+        b64[out++] =   b64chars[in[2] & 0x3f];
+
+        i++;
+        if (i >= hashlength ) { // three bytes, so we need no pad - wrap it;
+          break;
+        }
+        //Serial.println(out);
+      } // this should make b64 an array of sextets that is "out" in length
+      b64[out] = 0;
+      base64 = b64;
+      return (base64);
+    }
     void store(uint8_t * data, int dataSize) {
       //Stores an one Image, splitting it into segments
       int dsize = dataSize;
@@ -373,7 +438,7 @@ class RAMImage {
         } else {
           sizeArray[index] = dsize;
           finalIndex = index;
-          Serial.println(sizeArray[index]);
+          Serial.println(F("Image Stored in RAM"));
           break;
         }
         index++;
@@ -771,12 +836,13 @@ class masterStatus {
     //Sensor Variables
     float Battery; // max 4.2V min 2.75V
     float BatteryAcc; //Accumulator
-    float SolarXPlus; //Current in Amps
-    float SolarXMinus; //Current in Amps
-    float SolarYPlus; //Current in Amps
-    float SolarYMinus; //Current in Amps
-    float SolarZPlus; //Current in Amps
-    float SolarZMinus; //Current in Amps
+    //    float SolarXPlus; //Current in Amps
+    //    float SolarXMinus; //Current in Amps
+    //    float SolarYPlus; //Current in Amps
+    //    float SolarYMinus; //Current in Amps
+    //    float SolarZPlus; //Current in Amps
+    //    float SolarZMinus; //Current in Amps
+    float Solar; //Single Solar Input
     int DoorSense; //0 = Door Closed, 1 = Door Open
     float LightSense; //Sent From Slave
     float AnalogTemp; //Sent From Slave
@@ -789,11 +855,6 @@ class masterStatus {
     //Deployment Variables
     int missionStatus; //0=incomplete, 1=success, 2=failure
     int deploySetting; //0=DoorSensor OR Light, 1 = Just Light, 2 = Just DoorSensor
-    float * IMUData[3]; //TODO
-    float * LIGHTData; //TODO
-    float * AccelData[3]; //TODO
-    int dataIndex; //TODO
-    int accelIndex; //TODO
 
     //ADCS State Variables
     int MResets; //Number of Times Master has been reset
@@ -806,16 +867,17 @@ class masterStatus {
 
     //ROCKBLOCK Message Variables
     bool AttemptingLink; //True if waiting for SBDIX to return
+    bool MessageStaged; //True if message waiting in Mobile Originated Buffer
     int RBCheckType; //State of Outgoing Communication with RockBlock. 0=ping, 1=Send SBDIX, 2=Fetch Incomming Command
-    int MOStatus;
-    int MOMSN;
-    int MTStatus;
-    int MTMSN;
-    int MTLength;
-    int MTQueued;
+    int MOStatus; //0 if No Outgoing message, 1 if outgoing message success, 2 if error
+    int MOMSN; //Outgoing Message #
+    int MTStatus; //0 if No Incoming message, 1 if Incoming message success, 2 if error
+    int MTMSN; //Incoming Message #
+    int MTLength; //Incoming Message Length in bytes
+    int MTQueued; //# of messages waiting in iridium
     String SBDRT;
-    int LastMsgType; //0 = inval, 1 = ok, 2 = ring, 3 = error, 4 = ready
-    int LastSMsgType; //Only Update on NON EMPTY reads from RB: 0 = inval, 1 = ok, 2 = ring, 3 = error, 4 = ready
+    int LastMsgType; //0 = inval, 1 = ok, 2 = ring, 3 = error, 4 = ready //TODO
+    int LastSMsgType; //Only Update on NON EMPTY reads from RB: 0 = inval, 1 = ok, 2 = ring, 3 = error, 4 = ready //TODO
 
 
     masterStatus() {
@@ -835,12 +897,13 @@ class masterStatus {
       ImuTemp = 0;
       Battery = 3.8;
       BatteryAcc = 0;
-      SolarXPlus = 0;
-      SolarXMinus = 0;
-      SolarYPlus = 0;
-      SolarYMinus = 0;
-      SolarZPlus = 0;
-      SolarZMinus = 0;
+      //      SolarXPlus = 0;
+      //      SolarXMinus = 0;
+      //      SolarYPlus = 0;
+      //      SolarYMinus = 0;
+      //      SolarZPlus = 0;
+      //      SolarZMinus = 0;
+      Solar = 0;
       DoorSense = 0;
       LightSense = 0;
       AnalogTemp = 0;
@@ -855,6 +918,7 @@ class masterStatus {
       currentSegment = 0;
       RequestingImageStatus = 0;
 
+      MessageStaged = false;
       AttemptingLink = false;
       RBCheckType = 0;
       MOStatus = 0;
@@ -875,10 +939,6 @@ class masterStatus {
       CurZDir = 0;
       CurZPWM = 0;
 
-      IMUData[3][360] = {0};
-      LIGHTData[360] = {0};
-      dataIndex = 0;
-      accelIndex = 0;
     }
     void updateSensors() {
       //Update Internal Sensor Variables
@@ -890,15 +950,16 @@ class masterStatus {
         MagAcc[0] += M.x; MagAcc[1] += M.y; MagAcc[2] += M.z;
         TempAcc += getImuTempData(imu);
       }
-      SolarXPlus = getCurrentAmp(1); //X+
-      SolarXMinus = getCurrentAmp(2); //X-
-      SolarYPlus = getCurrentAmp(3); //Y+
-      SolarYMinus = getCurrentAmp(4); //Y-
-      SolarZPlus = getCurrentAmp(5); //Z+
-      SolarZMinus = getCurrentAmp(6); //Z-
+      //      SolarXPlus = getCurrentAmp(1); //X+
+      //      SolarXMinus = getCurrentAmp(2); //X-
+      //      SolarYPlus = getCurrentAmp(3); //Y+
+      //      SolarYMinus = getCurrentAmp(4); //Y-
+      //      SolarZPlus = getCurrentAmp(5); //Z+
+      //      SolarZMinus = getCurrentAmp(6); //Z-
+      Solar = getCurrentAmp(1); //1 Current Sensor
 
       //Serial.println(analogRead(BatteryPin));
-      BatteryAcc += 2 * fmap((float)analogRead(BatteryPin), 0.0, 1023.0, 0.0, 3.3); //TODO x2??
+      BatteryAcc += 2 * fmap((float)analogRead(BatteryPin), 0.0, 1023.0, 0.0, 3.3);
       //Serial.println(BatteryAcc);
       DoorSense = digitalRead(DoorSensePin);
     }
@@ -914,9 +975,10 @@ class masterStatus {
       output += "IT:" + String(ImuTemp) + ",";
       output += "AT:" + String(AnalogTemp) + ",";
       output += "B:" + String(Battery) + ",";
-      output += "SX+:" + String(SolarXPlus) + ",SX-:" + String(SolarXMinus) +
-                ",SY+:" + String(SolarYPlus) + ",SY-:" + String(SolarYMinus) +
-                ",SZ+:" + String(SolarZPlus) + ",SZ-:" + String(SolarZMinus) + ",";
+      //      output += "SX+:" + String(SolarXPlus) + ",SX-:" + String(SolarXMinus) +
+      //                ",SY+:" + String(SolarYPlus) + ",SY-:" + String(SolarYMinus) +
+      //                ",SZ+:" + String(SolarZPlus) + ",SZ-:" + String(SolarZMinus) + ",";
+      output += "SL+:" + String(Solar) + ",";
       output += "DS:" + String(DoorSense) + ",";
       output += "LS:" + String(LightSense) + ",";
       output += "nP:" + String(numPhotos) + ",";
@@ -961,18 +1023,17 @@ class masterStatus {
       OutputString += chop (constrain(roundDecimal(ImuTemp, 0), -60, 90), 0) + ",";
       OutputString += chop (constrain(roundDecimal(AnalogTemp, 0), -60, 90), 0) + ",";
       OutputString += chop (constrain(roundDecimal(Battery, 2), 2.75, 4.2), 2) + ",";
-      OutputString += chop (constrain(roundDecimal(1000 * SolarXPlus, 0), 0, 300), 0) + ",";
-      OutputString += chop (constrain(roundDecimal(1000 * SolarXMinus, 0), 0, 300), 0) + ",";
-      OutputString += chop (constrain(roundDecimal(1000 * SolarYPlus, 0), 0, 300), 0) + ",";
-      OutputString += chop (constrain(roundDecimal(1000 * SolarYMinus, 0), 0, 300), 0) + ",";
-      OutputString += chop (constrain(roundDecimal(1000 * SolarZPlus, 0), 0, 300), 0) + ",";
-      OutputString += chop (constrain(roundDecimal(1000 * SolarZMinus, 0), 0, 300), 0) + ",";
+      //      OutputString += chop (constrain(roundDecimal(1000 * SolarXPlus, 0), 0, 300), 0) + ",";
+      //      OutputString += chop (constrain(roundDecimal(1000 * SolarXMinus, 0), 0, 300), 0) + ",";
+      //      OutputString += chop (constrain(roundDecimal(1000 * SolarYPlus, 0), 0, 300), 0) + ",";
+      //      OutputString += chop (constrain(roundDecimal(1000 * SolarYMinus, 0), 0, 300), 0) + ",";
+      //      OutputString += chop (constrain(roundDecimal(1000 * SolarZPlus, 0), 0, 300), 0) + ",";
+      //      OutputString += chop (constrain(roundDecimal(1000 * SolarZMinus, 0), 0, 300), 0) + ",";
+      OutputString += chop (constrain(roundDecimal(1000 * Solar, 0), 0, 300), 0) + ",";
       OutputString += chop (constrain(roundDecimal(DoorSense, 2), 0, 4), 2) + ",";
       OutputString += chop (constrain(roundDecimal(LightSense, 0), 0, 100), 0) + ",";
       OutputString += chop (constrain(roundDecimal(numPhotos, 0), 0, 99), 0) + ",";
-      //      String(hardwareAvTable[0]);
-      //      String(SlaveWorking);//TODO
-      //      String(Resets);
+      //      String(hardwareAvTable[0]);//TODO
       //      String(ADCS_Active);
       OutputString += chop (constrain(roundDecimal(CurXDir, 0), -1, 1), 0) + ",";
       OutputString += chop (constrain(roundDecimal(CurXPWM, 2), 0, 4), 2) + ",";
@@ -982,20 +1043,19 @@ class masterStatus {
       OutputString += chop (constrain(roundDecimal(CurZPWM, 2), 0, 4), 2) + ",";
       //      if string length less thatn max number add random symbols until it is max length
 
-      for (int i = 109 - OutputString.length(); i <= (109 - OutputString.length() + 1); i++) {
-        OutputString[i] = 2;
-      }
-
-
-      byte DLBIN[OutputString.length()];
-      OutputString.getBytes(DLBIN, OutputString.length());
-      Serial.print(OutputString);
-      for (int i = 0; i < OutputString.length() - 1; i++) {
-        Serial.print("00");
-        Serial.print(DLBIN[i], BIN);
-        Serial.print(" ");
-      }
-      Serial.println("");
+      //      for (int i = 109 - OutputString.length(); i <= (109 - OutputString.length() + 1); i++) {
+      //        OutputString[i] = "#";
+      //      }
+      //
+      //      byte DLBIN[OutputString.length()];
+      //      OutputString.getBytes(DLBIN, OutputString.length());
+      //      Serial.print(OutputString);
+      //      for (int i = 0; i < OutputString.length() - 1; i++) {
+      //        Serial.print("00");
+      //        Serial.print(DLBIN[i], BIN);
+      //        Serial.print(" ");
+      //      }
+      //Serial.println("");
       return OutputString;
     }
 };
@@ -1017,15 +1077,15 @@ void initalizePinOut() {
   }
   pinMode(DoorTrig, OUTPUT);
   pinMode(BatteryPin, INPUT);
-  pinMode(RBSleep, OUTPUT);
+  pinMode(RBSleep, OUTPUT); digitalWrite(RBSleep, HIGH); //TODO
   pinMode(RB_RI, INPUT);
   pinMode(RB_RTS, INPUT);
   pinMode(RB_CTS, INPUT); pinMode(SolarXPlusPin, INPUT); //Solar Current X+
-  pinMode(SolarXMinusPin, INPUT); //Solar Current X-
-  pinMode(SolarYPlusPin, INPUT); //Solar Current Y+
-  pinMode(SolarYMinusPin, INPUT); //Solar Current Y-
-  pinMode(SolarZPlusPin, INPUT); //Solar Current Z+
-  pinMode(SolarZMinusPin, INPUT); //Solar Current Z-
+  //  pinMode(SolarXMinusPin, INPUT); //Solar Current X-
+  //  pinMode(SolarYPlusPin, INPUT); //Solar Current Y+
+  //  pinMode(SolarYMinusPin, INPUT); //Solar Current Y-
+  //  pinMode(SolarZPlusPin, INPUT); //Solar Current Z+
+  //  pinMode(SolarZMinusPin, INPUT); //Solar Current Z-
   pinMode(SolarZMinusPin, INPUT); //Slave Fault Handing (via Hard Reset)
   pinMode(DoorMagEnable, OUTPUT); //Allow Door Magnetorquer to work
 }
@@ -1034,44 +1094,45 @@ float getCurrentAmp(int panel) {
   //Returns Amperage of current sensors for panel # <panel>
   //1v/A @10kOhm 8.2V/A @82kOhm
   float current;
-  switch (panel) {
-    case 1:
-      if (masterStatusHolder.hardwareAvTable[1]) {
-        current = analogRead(SolarXPlusPin);
-      } else {
-        current = 0;
-      } break;
-    case 2:
-      if (masterStatusHolder.hardwareAvTable[2]) {
-        current = analogRead(SolarXMinusPin);
-      } else {
-        current = 0;
-      } break;
-    case 3:
-      if (masterStatusHolder.hardwareAvTable[3]) {
-        current = analogRead(SolarYPlusPin);
-      } else {
-        current = 0;
-      } break;
-    case 4:
-      if (masterStatusHolder.hardwareAvTable[4]) {
-        current = analogRead(SolarYMinusPin);
-      } else {
-        current = 0;
-      } break;
-    case 5:
-      if (masterStatusHolder.hardwareAvTable[5]) {
-        current = analogRead(SolarZPlusPin);
-      } else {
-        current = 0;
-      } break;
-    case 6:
-      if (masterStatusHolder.hardwareAvTable[6]) {
-        current = analogRead(SolarZMinusPin);
-      } else {
-        current = 0;
-      } break;
-  }
+  //  switch (panel) {
+  //    case 1:
+  //      if (masterStatusHolder.hardwareAvTable[1]) {
+  //        current = analogRead(SolarXPlusPin);
+  //      } else {
+  //        current = 0;
+  //      } break;
+  //    case 2:
+  //      if (masterStatusHolder.hardwareAvTable[2]) {
+  //        current = analogRead(SolarXMinusPin);
+  //      } else {
+  //        current = 0;
+  //      } break;
+  //    case 3:
+  //      if (masterStatusHolder.hardwareAvTable[3]) {
+  //        current = analogRead(SolarYPlusPin);
+  //      } else {
+  //        current = 0;
+  //      } break;
+  //    case 4:
+  //      if (masterStatusHolder.hardwareAvTable[4]) {
+  //        current = analogRead(SolarYMinusPin);
+  //      } else {
+  //        current = 0;
+  //      } break;
+  //    case 5:
+  //      if (masterStatusHolder.hardwareAvTable[5]) {
+  //        current = analogRead(SolarZPlusPin);
+  //      } else {
+  //        current = 0;
+  //      } break;
+  //    case 6:
+  //      if (masterStatusHolder.hardwareAvTable[6]) {
+  //        current = analogRead(SolarZMinusPin);
+  //      } else {
+  //        current = 0;
+  //      } break;
+  //  }
+  current = analogRead(SolarZMinusPin);
   current = fmap((float)current, 0.0, 1023.0, 0, .40244); //3.3V=.825A
   return current;
 }
@@ -1079,9 +1140,10 @@ float getCurrentAmp(int panel) {
 float getTotalAmperage() {
   //Check the amps from each solar panel and returns total amperage
   float TotalCurrent = 0;
-  for (int i = 1 ; i <= 6; i++) {
-    TotalCurrent += getCurrentAmp(i);
-  }
+  //  for (int i = 1 ; i <= 6; i++) {
+  //    TotalCurrent += getCurrentAmp(i);
+  //  }
+  getCurrentAmp(1); //1 Current Sensor
   return TotalCurrent;
 }
 
@@ -1140,7 +1202,7 @@ void buildBuffer(String com) {
     cBuf.commandStack[cBuf.openSpot][1] = commandData;
     if (com.indexOf("!") == com.length() - 1) {
       loop = false;
-      Serial.println(F("Finished Adding Commands"));
+      //Serial.println(F("Finished Adding Commands"));
     } else {
       com = com.substring(com.indexOf("!") + 1);
     }
@@ -1234,9 +1296,10 @@ boolean isInputValid(String input) {
 
 void popCommands() {
   //Process all the Incoming Commands
-  while (cBuf.openSpot > 0) { //TODO ManTimeout
+  long start = millis();
+  while (cBuf.openSpot > 0 && millis()-start < manualTimeout) { 
     if (cBuf.openSpot > 0) {
-      Serial.println (cBuf.openSpot - 1);
+      //Serial.println (cBuf.openSpot - 1);
       int currentCommand[2] = {cBuf.commandStack[cBuf.openSpot - 1][0], cBuf.commandStack[cBuf.openSpot - 1][1]};
       cBuf.commandStack[cBuf.openSpot - 1][0] = -1;
       cBuf.commandStack[cBuf.openSpot - 1][1] = -1;
@@ -1250,11 +1313,13 @@ void popCommands() {
         case (92): //Set Deploy Timeout (seconds)
           if (currentCommand[1] >= 2000) {
             deployTimeOut = (currentCommand[1]) * 1000;
+            Serial.println(("\nDeploy Timeout set to ") + String(currentCommand[1]) + (" sec"));
           }
           break;
         case (93): //Set Manual Function Timeout (millis)
           if (currentCommand[1] >= 2000) {
             manualTimeout = (currentCommand[1]);
+            Serial.println(("\nManual Function Timeout set to ") + String(currentCommand[1]) + (" ms"));
           }
           break;
         case (94): { //Toggle ADCS
@@ -1265,18 +1330,37 @@ void popCommands() {
         case (95): { //Set Master-Slave Command Time (millis)
             if (currentCommand[1] > 0) {
               SComTime = currentCommand[1];
+              Serial.print(("\nSCom Time set to ") + String(currentCommand[1]) + (" ms"));
             }
             break;
           }
         case (96): //Test Force Deploy
           digitalWrite(DoorTrig, HIGH);
+          Serial.println(F("\nForce Deploy"));
           break;
-        case (97): { //Check System Time
-            long t = millis();
-            Serial.println("<<System Time: " + String(t % (long)60 * 60000) + ":" +
-                           String(t % (long)60000) + ":" + String(t % (long)1000) + ">>");
-            break;
+        case (97): //Remove before flight //TODO
+          testRDL = (bool)currentCommand[1];
+          if (testRDL) {
+            Serial.println("\nRoutine Downlinks Activated");
+          } else {
+            Serial.println("\nRoutine Downlinks Deactivated");
           }
+          break;
+        case (98): //Begin Image Downlink
+          if (masterStatusHolder.imageR.Filename != F("N/A")) {
+            Serial.println("\nEntering Image Downlink");
+            masterStatusHolder.NextState = IMAGE_DOWNLINK;
+          } else {
+            Serial.println("\nNo Image Loaded");
+          }
+          break;
+        case (99): //Force Full Sleep to Reduce Overheating
+          Serial.println("\nForced Thermal Sleep for " + String(currentCommand[1]) + " minutes");
+          sendSCommand("92,2!");
+          digitalWrite(RBSleep, LOW);
+          delay(60000 * currentCommand[1]);
+          digitalWrite(RBSleep, HIGH);
+          break;
         case (51): //Take Photos
           sendSCommand("101,1!");
           break;
@@ -1286,11 +1370,11 @@ void popCommands() {
             break;
           }
         case (53): { //Get # of Available Photos
-            Serial.println("Photos Available: " + String(masterStatusHolder.numPhotos));
+            Serial.println("\nPhotos Available: " + String(masterStatusHolder.numPhotos));
             break;
           }
         case (54): //Wipe SD Card
-          Serial.println("Wiping SD Card");
+          Serial.println("\nWiping SD Card");
           sendSCommand("107,1!");
           break;
         case (61): //Update Master Resets (Recieve from Slave Only)
@@ -1341,7 +1425,7 @@ void popCommands() {
         case (76):
           masterStatusHolder.MTQueued = (currentCommand[1]);
           break;
-        case (77):
+        case (77): //???? TODO what is this
           masterStatusHolder.SBDRT = (currentCommand[1]);
           break;
         case (81): { //Move Image from SD->Slave RAM->Master RAM //TODO(and Initiate Downlink)
@@ -1401,7 +1485,7 @@ void popCommands() {
 void readSerialAdd2Buffer() {
   //Read Testing Commands from USB Serial
   if (Serial.available() > 0) {
-    Serial.println("Reading Testing Command");
+    //Serial.println("Reading Testing Command");
     String comString = "";
     while (Serial.available() > 0) {
       // get the new byte:
@@ -1409,11 +1493,11 @@ void readSerialAdd2Buffer() {
       // add it to the inputString:
       comString += inChar;
     }
-    Serial.println("TCommand: " + comString);
+    //Serial.println("TCommand: " + comString);
     if (isInputValid(comString)) {
-      Serial.println("Testing Command is Valid");
       buildBuffer(comString);
       popCommands();
+
     } else {
       Serial.println("Invalid Testing Command");
     }
@@ -1443,8 +1527,8 @@ void readSerialAdd2Buffer() {
 
 void sendSCommand(String data) {
   //Send Command to Slave Core
-  Serial.print("Command Sent to Slave: <");
-  Serial.println(data + ">");
+  //Serial.print("Command Sent to Slave: <");
+  //Serial.println(data + ">");
   char com[data.length() + 1];
   data.toCharArray(com, data.length() + 1);
   if (WireConnected) {
@@ -1462,7 +1546,11 @@ void sectionReadToValue(String s, int * data, int dataSize) {
   }
 }
 
+<<<<<<< HEAD
 uint8_t image[4000];
+=======
+uint8_t image[6000];
+>>>>>>> 15632d8d383f9d6d20f226ca316576aee5ea2390
 int dataIndex = 0;
 bool lastRead = false;
 int readSize = 0;
@@ -1479,7 +1567,7 @@ bool requestFromSlave() {
             res += (char)Wire.read();
           }
           readSize = res.toInt();
-          Serial.println("Incoming Photo Size: " + String(readSize));
+          Serial.println("\nIncoming Photo Size: " + String(readSize));
           if (readSize > 7) {
             masterStatusHolder.RequestingImageStatus = 2;
             sendSCommand("105,1!");
@@ -1495,27 +1583,35 @@ bool requestFromSlave() {
           break;
         }
       case (2): { //Get Image Data
-          Serial.print("Requesting Image Data: ");
-          (Wire.requestFrom(11, 32, true)); // request 64 bytes from slave device #8
+          //Serial.print("Requesting Image Data: ");
+          (Wire.requestFrom(11, WireTransferSize, true)); // request 64 bytes from slave device #8
           delay(10);
           int i = 0;
-          //Serial.println("AV: " + String(Wire.available()));
+          long oldDIndex = dataIndex;
+          //Serial.print(Wire.available());
           while (Wire.available()) {
             image[dataIndex] = (uint8_t)Wire.read();
+<<<<<<< HEAD
+=======
+            i++;
+>>>>>>> 15632d8d383f9d6d20f226ca316576aee5ea2390
             //Serial.println(segment[dataIndex]);
             if (dataIndex >= readSize) {
               break;
             }
             dataIndex++;
-            i++;
           }
           //printArray(segment, dataIndex);
-          Serial.println(dataIndex);
+          //Serial.println(dataIndex);
           //Serial.println("i: "+String(i));
+          Serial.print("[" + String(i) + "]");
+          if (dataIndex % DLSize < WireTransferSize) {
+            Serial.print("\n");
+          }
           if (dataIndex >= readSize - 1 && dataIndex > 16) { //if (i < 16) {
-            Serial.println("Last");
+            Serial.println("\nTransfer Complete");
             lastRead = true;
-            //printArray(segment, dataIndex);
+            //printArray(image, dataIndex);
             masterStatusHolder.RequestingImageStatus = 0;
             masterStatusHolder.imageR.store(image, dataIndex);
             dataIndex = 0;
@@ -1544,7 +1640,8 @@ bool requestFromSlave() {
           }
           res = res.substring(0, res.indexOf('|'));
           if (masterStatusHolder.State != DEPLOY_ARMED) {
-            Serial.println("SSVs Updated: " + res);
+            Serial.print("<SSV>");
+            //Serial.println(": " + res);
           }
           int data[11];
           sectionReadToValue(res, data, 11);
@@ -1593,7 +1690,6 @@ void sendIMUToSlave() {
 
 
 // RockBlock Uplink/Downlink Functions
-//
 
 int curComL = 0;
 
@@ -1630,7 +1726,10 @@ bool rockOKParse() {
 void RBData() {
   int swnumber = 0;
   String ReceivedMessage = rocResponseRead(); //determines case
-  Serial.print("<" + ReceivedMessage + ">");
+
+  //TODO Need to Slice if two commands recieved?
+
+  Serial.print("<M:" + ReceivedMessage + ">");
   //Serial.print("ReceivedMessage:");
   //Serial.println(ReceivedMessage);
   int plus = ReceivedMessage.indexOf('+');
@@ -1721,7 +1820,25 @@ void RBData() {
 
       //Safe to do here????
       masterStatusHolder.AttemptingLink = false;
-      masterStatusHolder.RBCheckType = 0;
+      if (masterStatusHolder.MTStatus == 1) { //Message Recieved by Iridium from RB
+        masterStatusHolder.MessageStaged = false;
+      } else {
+        //Retry?
+      }
+      masterStatusHolder.RBCheckType = 0; //Back to Idle
+
+      switch (masterStatusHolder.MOStatus) {
+        case (32):
+          Serial.println("No network service, unable to initiate call");
+          break;
+        case (33):
+          Serial.println("Antenna fault, unable to initiate call");
+          break;
+        case (0):
+          Serial.println("Message Sent Successfully");
+          break;
+      }
+
       break;
 
     case 2: //SBDRT command
@@ -1732,10 +1849,9 @@ void RBData() {
       } else {
         //Invalid Uplink
         masterStatusHolder.LastMsgType = 0;
-
       }
       break;
-    case 3://SBDRING
+    case 3://SBDRING (Shouldn't be Possible)
       //Message is waiting the Buffer
       masterStatusHolder.LastMsgType = 2;
       masterStatusHolder.LastSMsgType = 2;
@@ -1746,7 +1862,7 @@ void RBData() {
       masterStatusHolder.LastSMsgType = 1;
       //return "";
       break;
-    case 5: // ring
+    case 5: // Error
       masterStatusHolder.LastMsgType = 3;
       masterStatusHolder.LastSMsgType = 3;
       //return "";
@@ -1782,40 +1898,11 @@ bool responsePing() {
 }
 
 void sendSBDIX(bool AL) {
-  Serial1.print(F("AT+SBDIX")); // \r?
+  Serial1.print(F("AT+SBDIX\r")); // \r?
   if (AL) {
     masterStatusHolder.AttemptingLink = true;
   }
 }
-
-//int startTest() {
-//  // while millis < 6mins
-//  bool go = true;
-//  int failType = 0;
-//  Serial.println("Here Starttest");
-//  Serial1.print("ATE0\r");
-//  if (rocOKParse() || true) {
-//    Serial.println("Stage0 Pass");
-//    Serial1.print("AT\r");
-//    if (rocOKParse()) {
-//      Serial.println("Stage1 Pass");
-//      Serial1.print("AT + SBDIX\r");
-//      if (rocOKParse()) {
-//        Serial.println("Stage2 Pass");
-//        Serial1.print("AT + SBDWT = ");
-//        Serial1.print(downlinkData);
-//        Serial1.print("\r");
-//        if (rocOKParse()) {
-//          Serial.println("Stage3 Pass");
-//          go = false;
-//
-//        }
-//      }
-//    }
-//  }
-//  return failType;
-//
-//}
 
 int downlinkSegment(int segIndex) {
   // 0 For Success, 1 for No Ready, 2 For No OK
@@ -1889,42 +1976,45 @@ void print_binary(int v, int num_places) {
   }
 }
 
-//void buildImageBuffer(String Filename) { //Rename to masterstatusholderimagebuffer in future...
-//  File IMGFile = SD.open(Filename, FILE_READ);
-//  uint8_t jpglen = IMGFile.size();
-//  //int segments = ((8*jpglen) / 320) + 1;
-//  //String imageBuffer[segments];
-//  int index = 0;
-//  int i = 0;
-//  Serial.println("Starting Segmentation");
-//  while (IMGFile.available()) {
-//    //Serial.println("Available: " + String(IMGFile.available()));
-//    int bytesToRead = min(320, IMGFile.available());
-//    uint8_t segment[bytesToRead - 1];
-//    for (int z = 0; z < bytesToRead; z++) {
-//      segment[z] = 0;
-//    }
-//    while (i < bytesToRead) {
-//      segment[i] = (uint8_t)IMGFile.read();
-//      i++;
-//    }
-//    //Serial.print("Current Segment " + String(index) + ": ");
-//    printArray(segment, i);
-//    //Serial.println("");
-//    //Serial.println("Here1");
-//    //    imageBuffer[index] = segment;
-//    masterStatusHolder.imageR.store(segment, i, index);
-//    masterStatusHolder.imageR.sizeArray[index] = bytesToRead;
-//
-//    i = 0;
-//    index = index + 1;
-//    //Serial.println("Here2");
-//  }
-//  IMGFile.close():
-//  Serial.println("\nDone");
-//  masterStatusHolder.imageR.finalIndex = index - 1;
-//  return;
-//}
+int routineDownlink(String DLS) {
+  //Follow with SBDIX
+  //0 is success, 1 is RB error, 2 is message is too long
+  if (DLS.length() < 120) {
+    Serial1.print(("AT+SBDWT=" + DLS + "\r"));
+    delay(400);
+    if (rockOKParse()) {
+      masterStatusHolder.MessageStaged = true;
+      masterStatusHolder.MOStatus = 5; //Reset so it can go to 0 when success (5 means nothing)
+      Serial.print(F("\nRDL Staged for Downlink: "));
+      masterStatusHolder.RBCheckType = 1; //Send Staged Message
+      return 0;
+    } else {
+      Serial.print(F("\nRDL Failed, RB Error: "));
+      return 1;
+    }
+  } else {
+    Serial.print(F("\nRDL Failed, Message Too Long: "));
+    return 2;
+  }
+}
+
+bool initializeRB() {
+  Serial.println(F("\nInitializing RockBlock"));
+  Serial1.print(F("ATE0\r")); //Disable Echo
+  delay(100);
+  Serial1.print(F("AT+SBDD2\r")); //Clear Buffers
+  delay(100);
+  Serial1.print(F("AT+SBDMTA=0\r")); //Disable RING alerts
+  delay(100);
+  Serial1.print(F("AT&K0\r")); //Disable Flow Control
+  delay(100);
+  while (Serial1.available()) {
+    char c = (char)Serial1.read();
+    //Serial.print(c);
+  }
+  return responsePing(); //Ping to Check thats its working
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1975,9 +2065,9 @@ void setupWDT( uint8_t period) {
 void Stall() {
   stall = true;
   long start = millis();
-  Serial.println("Awaiting Input");
+  Serial.println("Stall Delay");
   if (LED_NOT_DOOR) {
-    while (millis() - start < 8000) { //(stall) {
+    while (millis() - start < 3000) { //(stall) {
       digitalWrite(13, HIGH);
       delay(40);
       digitalWrite(13, LOW);
@@ -1985,7 +2075,7 @@ void Stall() {
       Serial.print(".");
     }
   } else {
-    while (millis() - start < 8000) { //(stall) {
+    while (millis() - start < 3000) { //(stall) {
       delay(80);
       Serial.print(".");
     }
@@ -2015,8 +2105,7 @@ void setup() {
 
   initalizePinOut();
   digitalWrite(SlaveReset, HIGH); //Enable Slave
-  delay(1000);
-  Stall();
+  delay(100);
 
   cBuf = commandBuffer();
   masterStatusHolder = masterStatus();
@@ -2028,17 +2117,21 @@ void setup() {
   masterStatusHolder.RequestingImageStatus = 0;
   masterStatusHolder.State = NORMAL_OPS;
   masterStatusHolder.NextState = NORMAL_OPS;
+
+  if (initializeRB()) {
+    Serial.println(F("RockBlock Initialization Successful"));
+  } else {
+    Serial.println(F("RockBlock Initialization Failure"));
+  }
+
   Serial.println(F("Setup Done"));
 }
 
 //Testing Variables
 bool downlinkJustStaged = false;
 //bool ImageDownlink_Active = true;
-const int DOWNLINK_TESTING = 999;
-//const int IMAGE_REQUEST = 888;
 int Requests = 0;
 long linkTime = 0;
-int trys = 0;
 
 void loop() {
   readSerialAdd2Buffer(); //Testing Command Input
@@ -2073,7 +2166,7 @@ void loop() {
                 Requests = 0;
                 lastRead = false;
                 masterStatusHolder.NextState = NORMAL_OPS;//DOWNLINK_TESTING; ?
-                sendSCommand("104,1!");
+                sendSCommand("104,1!"); //TODO only send once?
                 Serial.println("");
                 masterStatusHolder.imageR.printRI();
                 //Stall();
@@ -2097,48 +2190,57 @@ void loop() {
         break;
       }
 
-    case (DOWNLINK_TESTING):
+    case (IMAGE_DOWNLINK):
       if (masterStatusHolder.currentSegment <= masterStatusHolder.imageR.finalIndex) {
-        if (masterStatusHolder.MOStatus == 0) { //|| masterStatusHolder.currentSegment == 0) {
+        if (masterStatusHolder.MOStatus == 0 || masterStatusHolder.currentSegment == 0) {
           //Attempt Segment Downlink
+          if (masterStatusHolder.currentSegment != 0) {
+            Serial.println("\nSegment Downlink Successful");
+          }
+          masterStatusHolder.currentSegment++;
+
           if (!masterStatusHolder.AttemptingLink) {
             int error = downlinkSegment(masterStatusHolder.currentSegment);
             if (error == 0) {
               //Success
-              masterStatusHolder.MOStatus = 13;
+              masterStatusHolder.MOStatus = 5; //??? TODO
               downlinkJustStaged = true;
-              Serial.println("Segment " + String(masterStatusHolder.currentSegment) + " Staged");
+              Serial.println("\nSegment " + String(masterStatusHolder.currentSegment) +
+                             " Of " + String(masterStatusHolder.imageR.finalIndex + 1) + " Staged");
             } else {
               //Fail
-              Serial.println("Error: " + String(error));
+              Serial.println("\nError Staging Image: " + String(error));
+              masterStatusHolder.currentSegment--;
             }
           } else {
-            Serial.print("Still Attempting Link: ");
-            Serial.println(linkTime / 1000.0);
-            delay(50);
+            //            Serial.print("<R2>");
+            //            Serial.print("<L:" + String((linkTime - millis()) / 1000) + ">");
+            //            delay(1500); //Wait to check
+            //Waiting for link???
           }
         } else {
           if (downlinkJustStaged) {
             //SBDIX Call after SBDWB
-            Serial.print("SBDIX Sent");
+            Serial.println("\nSBDIX Sent");
             sendSBDIX(true); //Attempting Link is true after this
-
             linkTime = millis();
-            //downlinkJustStaged = true;
             downlinkJustStaged = false;
           }
-          if (trys % 50 == 0) {
-            Serial.println("");
-          }
-          trys++;
 
-          RBData(); //Can Reset MOStatus to 0
-          delay(200);
+          if (millis() - lastRBCheck > 1500) {
+            Serial.print("<R2>");
+            Serial.print("<L:" + String((linkTime - millis()) / 1000) + ">");
+            RBData(); //Can Reset MOStatus to 0
+            lastRBCheck = millis();
+          }
         }
       } else {
         masterStatusHolder.NextState = NORMAL_OPS;
       }
       //TODO Timeout
+      //if(timeout){
+      //    masterStatusHolder.currentSegment--
+      //}
       break;
 
     case (NORMAL_OPS):
@@ -2146,52 +2248,53 @@ void loop() {
       //Collect Sensor Data
       SensorDataCollect();
 
-      //RockBlock Communication
+      //RockBlock Communication //TODO RBSleep -> LOW
       if (millis() - lastRBCheck >= RBCheckTime) {
         switch (masterStatusHolder.RBCheckType) {
-          case (0): //Ping RockBlock to ensure Functionality
+          case (0): //Ping RockBlock to ensure Unit Functionality
             if (!masterStatusHolder.AttemptingLink) {
               Serial.print("<R");
               Serial1.println("AT\r");
               Serial.print(String(rockOKParse()) + ">");
+            } else {
+              Serial.print("<R2>"); //Waiting for SBDIX to return
             }
             break;
-          case (1): //Contact Iridium and Check for Messages
+          case (1): //Ping Iridium and Check for Messages, Send if any are outgoing
+            Serial.print("SBDIX Sent");
             sendSBDIX(true);
             break;
           case (2): //Fetch Incomming Command
             Serial1.print("AT+SBDRT\r");
+            masterStatusHolder.RBCheckType = 0;
         }
         delay(100);
-        RBData();
+        RBData(); //Check for incoming commands
         masterStatusHolder.RBCheckType = 0;
-        if (RBPings >= 100) { // ~10min
+        if (RBPings >= 100) { // ~10min RBCheckTime*100
           masterStatusHolder.RBCheckType = 1;
           RBPings = 0;
         }
-        if (false) { //TODO messages waiting
-
-
+        if (masterStatusHolder.MTStatus == 1) { //Message Recieved by RB from Iridium
+          masterStatusHolder.RBCheckType = 2; //Prep to Fetch Data
         }
         lastRBCheck = millis();
         RBPings++;
       }
 
-      //Just Print Camera Status for Testing
-      if (millis() - lastCamTime > 4000) {
+      //Print Camera Status for Testing
+      if (millis() - lastCamTime > camCheckTime) {
         Serial.print("<C" + String(masterStatusHolder.CameraStatus) + ">");
         lastCamTime = millis();
       }
 
-      //Testing IMU and Sensor Downlink String Generator
+      //Routine Downlinks
       if (millis() - lastDLTime >= DLTime || commandedDL) {
-        //Send Data to RockBlock via Serial
-        String DLS = masterStatusHolder.toString();
-        //String DLSshort = masterStatusHolder.OutputString();
-
-        Serial.println(F(""));
-        Serial.println(DLS);
-        //Serial.println(DLS.length());
+        if (testRDL) {
+          String DLSshort = masterStatusHolder.OutputString();
+          routineDownlink(DLSshort);
+          Serial.println("\n" + masterStatusHolder.toString());
+        }
         lastDLTime = millis();
       }
 
@@ -2200,12 +2303,10 @@ void loop() {
         unsigned long t = millis();
         if (millis() - lastSComAttempt >= SComTime) {
           lastSComAttempt = millis();
-          Serial.print("\nSlave IMU transfer: ");
+          Serial.print("<IMU>");
           sendIMUToSlave();
           bool SlaveResponse = requestFromSlave();
-
           if (SlaveResponse) {
-            //Serial.print(".");
             lastSComTime = millis(); //Reset Timeout if Com is successful
           } else {
             //No Reply From Slave
@@ -2233,8 +2334,9 @@ void loop() {
 
       //ADCS
       if (millis() - LastSpinCheckT > SpinCheckTime) {
-        Serial.println("Here3");
-        LastSpinCheckT = millis();
+        Serial.print("<G:" + String(masterStatusHolder.Gyro[0]) + "|" +
+                     String(masterStatusHolder.Gyro[1]) + "|" +
+                     String(masterStatusHolder.Gyro[2]) + ">");
         if (masterStatusHolder.Gyro[0] > OmegaThreshold || masterStatusHolder.Gyro[1] > OmegaThreshold) {
           sendSCommand("91,1!"); //Activate Torquers
           masterStatusHolder.ADCS_Active = true;
@@ -2242,38 +2344,62 @@ void loop() {
           sendSCommand("91,0!"); //Deactivate Torquers
           masterStatusHolder.ADCS_Active = false;
         }
+        LastSpinCheckT = millis();
       }
 
       //Eclipse Detection
-      //        if (getTotalAmperage() < EclipseAmp_Threshold) {
-      //          masterStatusHolder.NextState = ECLIPSE;
-      //          //torquers off
-      //          eclipseEntry = millis();
-      //        }
-      //        //Low Power Detection
-      //        if (masterStatusHolder.Battery * 2 < LV_Threshold) {
-      //          masterStatusHolder.NextState = LOW_POWER;
-      //          lowPowerEntry = millis();
-      //        }
-
-      //Blinker for Testing
-      if (millis() - ledLastTime >= 100) {
-        if (LED_NOT_DOOR) {
-          //unsigned long t = millis() - ledLastTime;
-          if (ledState == LOW) {
-            ledState = HIGH;
-          } else {
-            ledState = LOW;
-          }
-          digitalWrite(13, ledState);
+      if (millis() - LastSolarCheck > SolarCheckTime) {
+        float s = getTotalAmperage();
+        Serial.print("<S:"+String(s)+">");
+        if (s < EclipseAmp_Threshold) {
+          //masterStatusHolder.NextState = ECLIPSE; //TODO
+          sendSCommand("91,0!");
+          eclipseEntry = millis();
         }
-        Serial.print(F("."));
-        //        Serial.print("Running: ");
-        //        Serial.print(t);
-        //        Serial.print(" -> Cycle Stretch of: ");
-        //        Serial.println(t - 100);
-        ledLastTime = millis();
       }
+
+      //Low Power Detection
+      if (millis() - LastBattCheck > BattCheckTime) {
+        Serial.print("<B:"+String(masterStatusHolder.Battery * 2)+">");
+        if (masterStatusHolder.Battery <= LV_Threshold) {
+          //masterStatusHolder.NextState = LOW_POWER; //TODO
+          lowPowerEntry = millis();
+        }
+      }
+
+      //Thermal Protection/Control //TODO put in other Ops?
+      if (millis() - LastThermalCheck > ThermalCheck) {
+        if (masterStatusHolder.AnalogTemp > HT_Threshold) {
+          Serial.println("\n<Warning!> Overheat Threshold Passed");
+          sendSCommand("92,2!");
+        } else if (masterStatusHolder.AnalogTemp < LT_Threshold) {
+          Serial.println("\n<Warning!> Low Temp Threshold Passed");
+          sendSCommand("92,1!");
+        } else {
+          sendSCommand("92,0!");
+        }
+        Serial.print("<T" + String((int)masterStatusHolder.AnalogTemp) + ">");
+      }
+
+      //      //Blinker for Testing
+      //      if (millis() - ledLastTime >= 100) {
+      //        if (LED_NOT_DOOR) {
+      //          //unsigned long t = millis() - ledLastTime;
+      //          if (ledState == LOW) {
+      //            ledState = HIGH;
+      //          } else {
+      //            ledState = LOW;
+      //          }
+      //          digitalWrite(13, ledState);
+      //        }
+      //        Serial.print(F("."));
+      //        //        Serial.print("Running: ");
+      //        //        Serial.print(t);
+      //        //        Serial.print(" -> Cycle Stretch of: ");
+      //        //        Serial.println(t - 100);
+      //        ledLastTime = millis();
+      //      }
+
       break;
 
     case (DORMANT_CRUISE):
@@ -2288,7 +2414,7 @@ void loop() {
 
     case (INITALIZATION): {
         if (millis() - initEntry < 100) {
-          sendSCommand("91,1!");
+          sendSCommand("91,1!"); //TODO Maybe more than once?
         }
 
         //Collect Sensor Data
@@ -2304,9 +2430,10 @@ void loop() {
           masterStatusHolder.NextState = INIT_SLEEP;
         }
 
-        if (millis() - initEntry > (long)2700000) {
+        if (millis() - initEntry > (long)2700000) { //Force to Normal Ops
           //call downlink function
           //TODO
+          masterStatusHolder.NextState = NORMAL_OPS;
         }
         break;
       }
@@ -2323,8 +2450,7 @@ void loop() {
       }
       break;
 
-    case (ECLIPSE):
-      {
+    case (ECLIPSE): {
 
         //Check Battery
         //Check Solar Current
@@ -2341,7 +2467,7 @@ void loop() {
           masterStatusHolder.NextState = NORMAL_OPS;
           normOpEntry = millis();
         } else {
-          delay(10000);
+          delay(8000);
         }
         break;
       }
@@ -2351,16 +2477,13 @@ void loop() {
         //Serial.print("after sensor data collect");
         if (millis() - lastSComAttempt >= 5) {
           lastSComAttempt = millis();
-          sendIMUToSlave();
+          //sendIMUToSlave(); //Do I need this?
           bool SlaveResponse = requestFromSlave();
           if (SlaveResponse) {
             lastSComTime = millis(); //Reset Timeout if Com is successful
           }
         }
         Serial.print("<" + String(digitalRead(DoorSensePin)) + "," + String(masterStatusHolder.LightSense) + ">");
-        if (cycle % 29 == 0) {
-          Serial.println("");
-        }
         if (DA_Initialize) {
           //if (true){
           digitalWrite(DoorTrig, HIGH); //Activate Nichrome
@@ -2412,20 +2535,9 @@ void loop() {
 
     case (DEPLOY_VERIF):
       Serial.print("$");
-      if (cycle % 100 == 0) {
-        Serial.println("");
-      }
       delay(10);
       //bool SlaveResponse = requestFromSlave(); //Need inputisvalid
       lastAccelTime = millis();
-
-      //      if (millis() - lastAccelTime >= 1000 &&  masterStatusHolder.accelIndex <= 40){ //take accelerometer data every .5s for 20s
-      //        masterStatusHolder.AccelData[0][masterStatusHolder.accelIndex] = masterStatusHolder.Accel[0];
-      //        masterStatusHolder.AccelData[1][masterStatusHolder.accelIndex] = masterStatusHolder.Accel[1];
-      //        masterStatusHolder.AccelData[2][masterStatusHolder.accelIndex] = masterStatusHolder.Accel[2];
-      //        lastAccelTime = millis();
-      //        masterStatusHolder.accelIndex++;
-      //      }
 
       if (masterStatusHolder.LightSense > LightThreshold) { //LightSensor Trigger
         masterStatusHolder.missionStatus = 2;
@@ -2447,18 +2559,44 @@ void loop() {
       }
       break;
 
-
   }
   masterStatusHolder.State = masterStatusHolder.NextState;
   //Testing Iterators
   cycle++;
-  //Serial.print("C : ");
-  //Serial.println(cycle);
-  if (masterStatusHolder.State == NORMAL_OPS && (millis() % (long)60000 == 0)) {
-    long t = millis();
-    Serial.println("<<System Time: " + String(t % (long)60 * 60000) + ":" +
-                   String(t % (long)60000) + ":" + String(t % (long)1000) + ">>");
+  //Blinker for Testing
+  if (millis() - ledLastTime >= 100) {
+    if (LED_NOT_DOOR) {
+      //unsigned long t = millis() - ledLastTime;
+      if (ledState == LOW) {
+        ledState = HIGH;
+      } else {
+        ledState = LOW;
+      }
+      digitalWrite(13, ledState);
+    }
+    Serial.print(F("."));
+    //        Serial.print("Running: ");
+    //        Serial.print(t);
+    //        Serial.print(" -> Cycle Stretch of: ");
+    //        Serial.println(t - 100);
+    ledLastTime = millis();
   }
+
+  if (cycle % 600 == 0) {
+    ST = true;
+  }
+  if (ST && ((millis() - LastTimeTime) > 4000)) { //Prevent Screen Spam
+    long t = millis();
+    Serial.print("[" + String((millis() - LastTimeTime) / 1000.0) + "]"); //Cycle Lag
+    Serial.print("\n[System Time: " + String(t / (long)(60 * 60 * 1000)) + ":" +
+                 String(t / ((long)60 * 1000) % ((long)60 * 1000)) + ":" +
+                 String((t / 1000) % ((long)1000) % 60) +
+                 "][" + String(masterStatusHolder.State) + "]");
+    LastTimeTime = t;
+    ST = false;
+    cycle = 0;
+  }
+
 }
 
 
