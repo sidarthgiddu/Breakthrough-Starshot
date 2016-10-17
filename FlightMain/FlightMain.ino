@@ -157,13 +157,33 @@ class floatTuple
     }
 };
 
-float fmap(float x, float in_min, float in_max, float out_min, float out_max)
-{
-  return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
-}
+class Node {
+  public:
+    Node* pred;
+    uint8_t* arr;
+    Node* succ;
 
+    Node(Node* p, uint8_t a[], Node* s) {
+      pred = p;
+      arr = a;
+      succ = s;
+    }
+};
 
-void printArray(uint8_t * arr, int s) {
+class NodeInt {
+  public:
+    NodeInt* pred;
+    int integer;
+    NodeInt* succ;
+
+    NodeInt(NodeInt* p, int i, NodeInt* s) {
+      pred = p;
+      integer = i;
+      succ = s;
+    }
+};
+
+void printArray(uint8_t arr[], int s) {
   if (s) {
     for (int i = 0; i < s; i++) {
       print_binary(arr[i], 8);
@@ -172,6 +192,112 @@ void printArray(uint8_t * arr, int s) {
     Serial.println("");
   }
 }
+
+class LinkedList {
+  private:
+    int l_size;
+    Node* head; //need to be pointers because can't assign null to objects
+    Node* tail;
+
+
+  public:
+    LinkedList() {
+      l_size = 0;
+      head = 0;
+      tail = 0;
+    }
+
+    int getSize(bool start = true) {
+      return l_size;
+    }
+
+    void add(uint8_t a[]) {
+      Node* n;
+      if (l_size == 0) {
+        n = new Node(0, a, 0);
+        head = n;
+        tail = n;
+      }
+      else {
+        n = new Node(tail, a, 0);
+        tail->succ = n;
+        tail = n;
+      }
+      l_size++;
+    }
+
+    Node* getNode(int index) {
+      Node* n = head;
+      for (int i = 0; i < index; i++) {
+        n = n->succ;
+      }
+      return n;
+    }
+    uint8_t* getArr(int index) { //now returns actual array, not pointer
+      return getNode(index)->arr;
+    }
+};
+
+class LinkedListInt {
+  private:
+    int l_size;
+    NodeInt* head;
+    NodeInt* tail;
+
+  public:
+    LinkedListInt() {
+      l_size = 0;
+      head = 0;
+      tail = 0;
+    }
+
+    int getSize() {
+      return l_size;
+    }
+
+    void add(int a) {
+      NodeInt* n;
+      if (l_size == 0) {
+        n = new NodeInt(0, a, 0);
+        head = n;
+        tail = n;
+      }
+      else {
+        n = new NodeInt(tail, a, 0);
+        tail->succ = n;
+        tail = n;
+      }
+      l_size++;
+    }
+
+    NodeInt* getNode(int index) {
+      NodeInt* n = head;
+      if (index < l_size / 2) {
+        for (int i = 1; i <= index; i++) {
+          n = n->succ;
+        }
+      }
+      else {
+        n = tail;
+        for (int i = l_size - 2; i >= index; i--) {
+          n = n->pred;
+        }
+      }
+      return n;
+    }
+    int getInt(int index) {
+      return getNode(index)->integer;
+    }
+
+};
+
+
+float fmap(float x, float in_min, float in_max, float out_min, float out_max)
+{
+  return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
+}
+
+
 
 class RAMImage {
   public:
@@ -301,7 +427,7 @@ class RAMImage {
       return (base64);
     }
     void store(uint8_t * data, int dataSize) {
-      //Stores an entire Image, splitting it into segments
+      //Stores an one Image, splitting it into segments
       int dsize = dataSize;
       int index = 0;
       while (true) {
@@ -503,6 +629,121 @@ class RAMImage {
     }
 };
 
+class RAMImage2 {
+  public:
+    int finalIndex;
+    String Filename;
+    LinkedList* list;
+    LinkedListInt* intlist;
+
+
+    RAMImage2() {
+      finalIndex = 0;
+      Filename = "";
+      list = new LinkedList();
+      intlist = new LinkedListInt();
+    }
+
+    void printRI() {
+      delay(100);
+      Serial.println("\nRAM Loaded Image: " + Filename);
+      Serial.println("   Segments: " + String(finalIndex + 1));
+      int sum = 0; for (int i = 0; i <= finalIndex; i++) {
+        sum += intlist->getInt(i);
+      }
+      Serial.println("   Total Size: " + String(sum));
+      Serial.println("\nBinary Form:\n");
+
+      int l = list->getSize();
+      for (int i = 0; i < l; i++) {
+        printArray(list->getArr(i), intlist->getInt(i));
+      }
+      /*
+        printArray(a0, sizeArray[0]);
+        printArray(a1, sizeArray[1]);
+        printArray(a2, sizeArray[2]);
+        printArray(a3, sizeArray[3]);
+        printArray(a4, sizeArray[4]);
+        printArray(a5, sizeArray[5]);
+        printArray(a6, sizeArray[6]);
+        printArray(a7, sizeArray[7]);
+        printArray(a8, sizeArray[8]);
+        printArray(a9, sizeArray[9]);
+        printArray(a10, sizeArray[10]);
+        printArray(a11, sizeArray[11]);
+        printArray(a12, sizeArray[12]);
+        printArray(a13, sizeArray[13]);
+        printArray(a14, sizeArray[14]);
+        printArray(a15, sizeArray[15]);
+      */
+    }
+
+    int photoSize() {
+      int sum = 0;
+      for (int i = 0; i < intlist -> getSize(); i++) {
+        sum += intlist -> getInt(i);
+      }
+      return sum;
+    }
+
+    /**
+       stores entire image data into linked list, dataSize is length of linked list
+    */
+    void store(uint8_t* data, int dataSize) { //parameters are pointer to data array and size of data array and pointer contains address of element 0 of data array
+      //get and add methods work properly
+      int dsize = dataSize;
+      Serial.print("DSize: ");
+      Serial.println(dsize);
+      int index = 0;
+      while (true) {
+        if (dsize - DLSize > 0) {
+          intlist-> add(DLSize);
+          dsize -= DLSize;
+          //Serial.println(sizeArray[index]);
+        } else {
+          intlist-> add(dsize);
+          finalIndex = index;
+          break;
+        }
+        index++;
+      }
+      uint8_t dataArray[DLSize];
+      uint8_t* dptr = data; //d is a pointer that equals data which points to address of first element of data
+      uint8_t* aptr = dataArray; //a points to the first element of dataArray
+      for (int i = 0; i < dataSize; i++) {
+        if ((i != 0) && (i % DLSize == 0)) {
+          list->add(dataArray);
+          //printArray(dataArray, DLSize);
+          aptr = &dataArray[0];
+        }
+        *aptr++ = *dptr++;
+      }
+    }
+
+    /**
+      void store(uint8_t data, int dataSize, int index) {
+      int bytes = min(dataSize, DLSize);
+      if (index > finalIndex) {
+        finalIndex = index;
+      }
+
+      uint8_t new_arr[DLSize] = {0};
+      for (int i = 0; i < bytes; i++) {
+        new_arr[i] = data[i];
+      }
+
+      list->set(index, new_arr);
+      }
+
+
+      uint8_t get(int index) {
+      return list->getArr(index);
+      }
+    */
+
+
+};
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -568,7 +809,8 @@ class masterStatus {
     //Class to hold entire State of Spacecraft Operation except timers
   public:
 
-    RAMImage imageR;
+    //RAMImage imageR;
+    RAMImage2 imageR;
     int currentSegment;
     int RequestingImageStatus;
 
@@ -675,7 +917,8 @@ class masterStatus {
       missionStatus = 0;
 
 
-      imageR = RAMImage();
+      //imageR = RAMImage();
+      imageR = RAMImage2();
       currentSegment = 0;
       RequestingImageStatus = 0;
 
@@ -1234,7 +1477,7 @@ void popCommands() {
           MSH.SBDRT = (currentCommand[1]);
           break;
         case (81): { //Move Image from SD->Slave RAM->Master RAM //TODO(and Initiate Downlink)
-            MSH.imageR = RAMImage();
+            MSH.imageR = RAMImage2();
             MSH.RequestingImageStatus = 1;
             MSH.NextState = IMAGE_REQUEST;
             String com = "103," + String(currentCommand[1]) + "!";
@@ -1704,8 +1947,10 @@ void sendSBDIX(bool AL) {
 
 int downlinkSegment(int segIndex) {
   // 0 For Success, 1 for No Ready, 2 For No OK
-  uint8_t * Data = MSH.imageR.get(segIndex);
-  int DataSize = MSH.imageR.sizeArray[segIndex];
+  //  uint8_t * Data = MSH.imageR.get(segIndex); //Old imageR code
+  //  int DataSize = MSH.imageR.sizeArray[segIndex];
+  uint8_t* Data = MSH.imageR.list->getArr(segIndex); //Data contains pointer to first element in array
+  int DataSize = MSH.imageR.intlist->getInt(segIndex);
 
   Serial.println("Begining Downlink");
 
@@ -1727,11 +1972,12 @@ int downlinkSegment(int segIndex) {
     return 1;
   }
 
-  uint16_t checksum = 0;
+  uint8_t checksum = 0;
   for (int i = 0; i < DataSize; ++i)
   {
-    Serial1.write(Data[i]);
-    checksum += (uint16_t)Data[i];
+    Serial1.write(*Data);
+    checksum += (uint8_t) * Data;
+    *Data++;
   }
   //printArray(imageBuffer[0], DataSize);
   Serial1.write(checksum >> 8);
