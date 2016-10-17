@@ -1546,11 +1546,8 @@ void sectionReadToValue(String s, int * data, int dataSize) {
   }
 }
 
-<<<<<<< HEAD
-uint8_t image[4000];
-=======
+
 uint8_t image[6000];
->>>>>>> 15632d8d383f9d6d20f226ca316576aee5ea2390
 int dataIndex = 0;
 bool lastRead = false;
 int readSize = 0;
@@ -1591,10 +1588,7 @@ bool requestFromSlave() {
           //Serial.print(Wire.available());
           while (Wire.available()) {
             image[dataIndex] = (uint8_t)Wire.read();
-<<<<<<< HEAD
-=======
             i++;
->>>>>>> 15632d8d383f9d6d20f226ca316576aee5ea2390
             //Serial.println(segment[dataIndex]);
             if (dataIndex >= readSize) {
               break;
