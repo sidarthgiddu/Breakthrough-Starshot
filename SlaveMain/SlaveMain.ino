@@ -327,7 +327,8 @@ class slaveStatus
       String r1 = String(resets) + "," + String(Temp) + "," + String(Light) + "," +
                   String(CurXDir) + "," + String(CurYDir) + "," + String(CurZDir) + "," +
                   String(CurXPWM) + "," + String(CurYPWM) + "," + String(CurZPWM) + "," +
-                  String(numPhotos) + "," + String(camStatus) + "," + "|,,,";
+                  String(numPhotos) + "," + String(camStatus) + "," +
+                  String(CameraBurst) + ",|,,,";
       char r2[r1.length()];
       r1.toCharArray(r2, r1.length());
       Wire.write(r2, r1.length());
@@ -1219,7 +1220,7 @@ void loop() {
   StatusHolder.ADCS_Active = false;
   //Test ADCS
   switch (StatusHolder.Thermal) {
-    case (1): //Too Cold
+    case (1): //Too Cold //TODO ensure master doesn't trigger if lowpower
       if (millis() - lastADCSTime >= 2000) {
         digitalWrite(CXY_Enable, HIGH);
         digitalWrite(CZ_Enable, HIGH);
@@ -1236,7 +1237,7 @@ void loop() {
         lastADCSTime = millis();
       }
       break;
-    case (0):
+    case (0): //Normal Temp
       if (StatusHolder.ADCS_Active) {
         if (millis() - lastADCSTime >= 2000) {
           if (millis() - lastADCSTime >= 2100) {
