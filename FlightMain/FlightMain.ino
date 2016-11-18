@@ -2248,6 +2248,10 @@ void loop() {
 
    case(TEST_GYRO_DEPLOY):
       MSH.updateSensors();
+      unsigned long startTime = millis();
+      while(millis() - startTime <= 500){
+        
+      }
       int gyro_z = MSH.GyroAcc[2];
       if(abs(gyro_z) >= gyroSpeed){
         MSH.NextState = DEPLOY_ARMED;
