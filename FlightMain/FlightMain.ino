@@ -24,16 +24,16 @@
 bool WireConnected = true;
 bool LED_NOT_DOOR = false;
 unsigned long LastTimeTime = 0;
-int TimeTime = 3071;
+int TimeTime = 4000;
 bool ST = false;
 
 ////Constant Initialization
 unsigned long cruiseEnd = 30 * 60 * 1000;
 unsigned long ledLastTime = millis();
 long cycle = 0;
-int ledState = LOW;
+bool ledState = LOW;
 unsigned long manualTimeout = 10 * 1000;
-int SlaveResets = 0;
+unsigned int SlaveResets = 0;
 unsigned long deployTimeOut = 30 * 1000;
 
 //State Machine Transition Flags and Times
@@ -49,12 +49,12 @@ unsigned long forceLPEclipseTime = 180 * 60 * 1000;
 unsigned long lastAccelTime;
 
 //Threshold Values
-int LightThreshold = 80; //0-100
-float LV_Threshold = 3.38; //Volts
-float HV_Threshold = 3.80; //Volts
+uint8_t LightThreshold = 80; //0-100
+float LV_Threshold = 3.20; //Volts
+float HV_Threshold = 3.40; //Volts
 float EclipseAmp_Threshold = 0.01; //10mA
-int LT_Threshold = -10; //C
-int HT_Threshold = 60; //C
+int8_t LT_Threshold = -10; //C
+uint8_t HT_Threshold = 60; //C
 float gyroThresholdX = 3; //dps
 float gyroThresholdY = 3; //dps
 float gyroThresholdZ = 3; //dps
@@ -62,11 +62,11 @@ int gyroSpeed = 500;
 int gyroTime = 500;
 
 //Battery Test
-long LastBattCheck = 0;
-int BattCheckTime = 8100;
-long LastSolarCheck = 0;
+bool POWER_SAVE = true;
+unsigned long LastBattCheck = 0;
+uint16_t BattCheckTime = 8100;
+unsigned long LastSolarCheck = 0;
 int SolarCheckTime = 9000;
-
 //RockBlock Test
 unsigned long lastRBCheck = 0;
 long RBCheckTime = 6000;
@@ -121,12 +121,17 @@ const int RB_RTS = 22;
 const int RB_CTS = 23;
 const int SDApin = 20; //I2C Data
 const int SCLpin = 21; //I2C Clock
-const int SolarXPlusPin = A4; //Solar Current X+
-const int SolarXMinusPin = A3; //Solar Current X-
-const int SolarYPlusPin = A2; //Solar Current Y+
-const int SolarYMinusPin = A1; //Solar Current Y-
-const int SolarZPlusPin = A5; //Solar Current Z+
-const int SolarZMinusPin = 9; //Solar Current Z-
+//const int SolarXPlusPin = A4; //Solar Current X+
+//const int SolarXMinusPin = A3; //Solar Current X-
+//const int SolarYPlusPin = A2; //Solar Current Y+
+//const int SolarYMinusPin = A1; //Solar Current Y-
+//const int SolarZPlusPin = A5; //Solar Current Z+
+const int DoorSenseGnd = A1;
+const int CamEnable = A2;
+const int LightSenseVcc = A3; //Light Sensor Power
+const int TempSenseVcc = A4; //Temp Sensor Power
+const int TempSenseGnd = A5; //Temp Sensor Ground
+const int SolarPin = 9; //Solar Current Z-
 const int SlaveReset = 10; //Slave Fault Handing (via Hard Reset)
 const int DoorMagEnable = 11; //Allow Door Magnetorquer to work
 
@@ -134,6 +139,7 @@ const int DoorMagEnable = 11; //Allow Door Magnetorquer to work
 #define chipSelect 4
 #define DLSize 320
 unsigned long lastCamTime = 0;
+unsigned long CamActivatedTime = 0;
 int camCheckTime = 4112;
 #define WireTransferSize 32
 static const char b64chars[] =
@@ -168,8 +174,6 @@ void printArray(uint8_t arr[], int s) {
     }
     Serial.println("");
 }
-
-
 
 float fmap(float x, float in_min, float in_max, float out_min, float out_max)
 {
@@ -227,7 +231,6 @@ class RAMImage {
       Serial.println("   Segments: " + String(queue.count()));
       Serial.println("   Total Size: " + String(photoSize()));
       Serial.println("\nBinary Form:\n");
-
       int queueSize = queue.count();
       for(int i = 0; i < queueSize; i++){
         uint8_t* arr= queue.pop();//returns pointer of first element of arr
@@ -297,6 +300,30 @@ class RAMImage {
       }
     }
 };
+
+bool initializeRB(bool init = false) {
+  //Serial1.print(F("AT&F0\r")); //Reset to Factory Config
+  Serial1.print(F("AT&K0\r")); //Disable Flow Control
+  Serial1.print(F("ATE0\r")); //Disable Echo
+  Serial1.print(F("AT+SBDD2\r")); //Clear Buffers
+  Serial1.print(F("AT+SBDMTA=0\r")); //Disable RING alerts
+  if (init) {
+    Serial1.print(F("AT&W0\r")); //Set This as default configuration
+    Serial1.print(F("AT&Y0\r")); //Set This as Power Up configuration
+  }
+  delay(1500);
+  int n = 18;
+  if (!init) {
+    n = 2;
+  }
+  Serial.print(Serial1.available());
+  while (n > 0) {
+    char c = (char)Serial1.read();
+    Serial.print(c);
+    n--;
+  }
+  return true;//responsePing(); //Ping to Check thats its working
+}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -406,6 +433,8 @@ class masterStatus {
     int numPhotos; //Photos Stored in Slave SD Card
     int Resets; //Number of Times Slave has been Reset
     bool CameraStatus;
+    bool CameraBurst;
+    unsigned long BurstDuration;
 
     //Deployment Variables
     int missionStatus; //0=incomplete, 1=success, 2=failure
@@ -433,6 +462,7 @@ class masterStatus {
     String SBDRT;
     int LastMsgType; //0 = inval, 1 = ok, 2 = ring, 3 = error, 4 = ready //TODO
     int LastSMsgType; //Only Update on NON EMPTY reads from RB: 0 = inval, 1 = ok, 2 = ring, 3 = error, 4 = ready //TODO
+    int SBDIXFails;
 
 
     masterStatus() {
@@ -470,10 +500,11 @@ class masterStatus {
       missionStatus = 0;
 
 
-      //imageR = RAMImage();
       imageR = RAMImage();
       currentSegment = 0;
       RequestingImageStatus = 0;
+      CameraBurst = false;
+      BurstDuration = 15 * 1000;
 
       MessageStaged = false;
       AttemptingLink = false;
@@ -486,6 +517,7 @@ class masterStatus {
       MTQueued = 0;
       LastMsgType = 0;
       LastSMsgType = 0;
+      SBDIXFails = 0;
 
       ADCS_Active = 1;
       MResets = 0;
@@ -533,7 +565,7 @@ class masterStatus {
       //      output += "SX+:" + String(SolarXPlus) + ",SX-:" + String(SolarXMinus) +
       //                ",SY+:" + String(SolarYPlus) + ",SY-:" + String(SolarYMinus) +
       //                ",SZ+:" + String(SolarZPlus) + ",SZ-:" + String(SolarZMinus) + ",";
-      output += "SL+:" + String(Solar) + ",";
+      output += "SL:" + String(Solar) + ",";
       output += "DS:" + String(DoorSense) + ",";
       output += "LS:" + String(LightSense) + ",";
       output += "nP:" + String(numPhotos) + ",";
@@ -629,19 +661,19 @@ void initalizePinOut() {
     pinMode(DoorSensePin, OUTPUT); //Red LED and Door Sensor (-_-)
   } else {
     pinMode(DoorSensePin, INPUT_PULLUP);
+    pinMode(DoorSenseGnd, INPUT); digitalWrite(DoorSenseGnd, LOW);
   }
   pinMode(DoorTrig, OUTPUT);
   pinMode(BatteryPin, INPUT);
   pinMode(RBSleep, OUTPUT); digitalWrite(RBSleep, HIGH); //TODO
   pinMode(RB_RI, INPUT);
   pinMode(RB_RTS, INPUT);
-  pinMode(RB_CTS, INPUT); pinMode(SolarXPlusPin, INPUT); //Solar Current X+
-  //  pinMode(SolarXMinusPin, INPUT); //Solar Current X-
-  //  pinMode(SolarYPlusPin, INPUT); //Solar Current Y+
-  //  pinMode(SolarYMinusPin, INPUT); //Solar Current Y-
-  //  pinMode(SolarZPlusPin, INPUT); //Solar Current Z+
-  //  pinMode(SolarZMinusPin, INPUT); //Solar Current Z-
-  pinMode(SolarZMinusPin, INPUT); //Slave Fault Handing (via Hard Reset)
+  pinMode(RB_CTS, INPUT);
+  pinMode(SolarPin, INPUT);
+  pinMode(CamEnable, OUTPUT); //Enable/Disable Camera Old Solar Current Pin
+  pinMode(LightSenseVcc, OUTPUT); digitalWrite(LightSenseVcc, HIGH); //LS Power
+  pinMode(TempSenseVcc, OUTPUT); digitalWrite(TempSenseVcc, HIGH); //TS Power
+  pinMode(TempSenseGnd, INPUT); digitalWrite(TempSenseVcc, LOW); //TS GND
   pinMode(DoorMagEnable, OUTPUT); //Allow Door Magnetorquer to work
 }
 
@@ -687,7 +719,7 @@ float getCurrentAmp(int panel) {
   //        current = 0;
   //      } break;
   //  }
-  current = analogRead(SolarZMinusPin);
+  current = analogRead(SolarPin);
   current = fmap((float)current, 0.0, 1023.0, 0, .40244); //3.3V=.825A
   return current;
 }
@@ -890,9 +922,11 @@ void popCommands() {
       switch (currentCommand[0]) {
         case (91): //Arm Deployment
           MSH.NextState = DEPLOY_ARMED;
+          digitalWrite(CamEnable, HIGH);
+          CamActivatedTime = millis();
           DA_Initialize = true;
         case (92): //Set Deploy Timeout (seconds)
-          if (currentCommand[1] >= 2000) {
+          if (currentCommand[1] * 1000 >= 2000) {
             deployTimeOut = (currentCommand[1]) * 1000;
             Serial.println(("\nDeploy Timeout set to ") + String(currentCommand[1]) + (" sec"));
           }
@@ -922,29 +956,44 @@ void popCommands() {
         case (97): //Remove before flight //TODO
           testRDL = (bool)currentCommand[1];
           if (testRDL) {
-            Serial.println("\nRoutine Downlinks Activated");
+            Serial.println(F("\nRoutine Downlinks Activated"));
           } else {
-            Serial.println("\nRoutine Downlinks Deactivated");
+            Serial.println(F("\nRoutine Downlinks Deactivated"));
           }
           break;
         case (98): //Begin Image Downlink
           if (MSH.imageR.Filename != F("N/A")) {
-            Serial.println("\nEntering Image Downlink");
+            Serial.println(F("\nEntering Image Downlink"));
             MSH.NextState = IMAGE_DOWNLINK;
           } else {
-            Serial.println("\nNo Image Loaded");
+            Serial.println(F("\nNo Image Loaded"));
           }
           break;
         case (99): //Force Full Sleep to Reduce Overheating
           Serial.println("\nForced Thermal Sleep for " + String(currentCommand[1]) + " minutes");
           sendSCommand("92,2!");
           digitalWrite(RBSleep, LOW);
+          digitalWrite(CamEnable, LOW);
+          //TODO Disable Camera, mode->LOW_POWER?
           delay(60000 * currentCommand[1]);
           digitalWrite(RBSleep, HIGH);
+          //Camera Off Unless needed
           delay(1000);
-          initializeRB(); //TODO store default condition in rockblock
+          //initializeRB(); //TODO store default condition in rockblock
+          break;
+        case (910): //Enable/Disable the Camera
+          digitalWrite(CamEnable, (bool)currentCommand[1]);
+          if ((bool)currentCommand[1]) {
+            CamActivatedTime = millis();
+          }
           break;
         case (911): //Force Routine Downlink
+          if (!digitalRead(RBSleep)) { //If RB Off -> Turn it on
+            Serial.println("\nRockBlock Powered On");
+            digitalWrite(RBSleep, HIGH);
+            delay(200);
+            initializeRB(); //TODO store default condition in rockblock
+          }
           commandedDL = true;
           break;
         case (912): //Set Routine Downlink Time in min
@@ -955,18 +1004,25 @@ void popCommands() {
           if ((bool)currentCommand[1]) {
             Serial.println("\nRockBlock Powered On");
             digitalWrite(RBSleep, HIGH);
-            delay(1000);
-            initializeRB(); //TODO store default condition in rockblock
+            delay(500);
+            //initializeRB(); //TODO store default condition in rockblock
           } else {
             Serial.println("\nRockBlock Powered Off");
             digitalWrite(RBSleep, LOW);
           }
           break;
         case (51): //Take Photos
-          sendSCommand("101,1!");
+          digitalWrite(CamEnable, HIGH); //TODO Disable When Done
+          delay(1000);
+          MSH.CameraBurst = true;
+          sendSCommand(F("101,1!"));
+          CamActivatedTime = millis();
+          Serial.println(F("\nPhotoBurst Initiated"));
           break;
         case (52): { //Set PhotoBurst Time in seconds
             String com = "102," + String(currentCommand[1]) + "!";
+            MSH.BurstDuration = currentCommand[1] * 1000;
+            Serial.println(F("\nPhotoBurst Time Set"));
             sendSCommand(com);
             break;
           }
@@ -975,8 +1031,8 @@ void popCommands() {
             break;
           }
         case (54): //Wipe SD Card
-          Serial.println("\nWiping SD Card");
-          sendSCommand("107,1!");
+          Serial.println(F("\nWiping SD Card"));
+          sendSCommand(F("107,1!"));
           break;
         case (61): //Update Master Resets (Recieve from Slave Only)
           MSH.MResets = (currentCommand[1]);
@@ -1008,27 +1064,27 @@ void popCommands() {
         case (610): //Update Number of Photos Stored (Recieve from Slave Only)
           MSH.numPhotos = (currentCommand[1]);
           break;
-        case (71):
-          MSH.MOStatus = (currentCommand[1]);
-          break;
-        case (72):
-          MSH.MOMSN = (currentCommand[1]);
-          break;
-        case (73):
-          MSH.MTStatus = (currentCommand[1]);
-          break;
-        case (74):
-          MSH.MTMSN = (currentCommand[1]);
-          break;
-        case (75):
-          MSH.MTLength = (currentCommand[1]);
-          break;
-        case (76):
-          MSH.MTQueued = (currentCommand[1]);
-          break;
-        case (77): //???? TODO what is this
-          MSH.SBDRT = (currentCommand[1]);
-          break;
+        //        case (71):
+        //          MSH.MOStatus = (currentCommand[1]);
+        //          break;
+        //        case (72):
+        //          MSH.MOMSN = (currentCommand[1]);
+        //          break;
+        //        case (73):
+        //          MSH.MTStatus = (currentCommand[1]);
+        //          break;
+        //        case (74):
+        //          MSH.MTMSN = (currentCommand[1]);
+        //          break;
+        //        case (75):
+        //          MSH.MTLength = (currentCommand[1]);
+        //          break;
+        //        case (76):
+        //          MSH.MTQueued = (currentCommand[1]);
+        //          break;
+        //        case (77): //???? TODO what is this
+        //          MSH.SBDRT = (currentCommand[1]);
+        //          break;
         case (81): { //Move Image from SD->Slave RAM->Master RAM //TODO(and Initiate Downlink)
             MSH.imageR = RAMImage();
             MSH.RequestingImageStatus = 1;
@@ -1042,6 +1098,7 @@ void popCommands() {
             filename[3] = '0' + currentCommand[1] % 1000 % 100 / 10;
             filename[4] = '0' + currentCommand[1] % 1000 % 100 % 10;
             MSH.imageR.Filename = filename;
+            MSH.currentSegment = 0;
             break;
           }
         case (83): { //Testing Command: Force State to Normal Ops
@@ -1051,7 +1108,7 @@ void popCommands() {
             break;
           }
         case (111): { //Force Send SBDIX
-            Serial.println("Sent SBDIX");
+            Serial.println("\nSent SBDIX");
             sendSBDIX(false); //Does NOT sent Attempting Link to True
             break;
           }
@@ -1099,7 +1156,7 @@ void readSerialAdd2Buffer() {
       popCommands();
 
     } else {
-      Serial.println("Invalid Testing Command");
+      Serial.println("\nInvalid Testing Command");
     }
   }
 }
@@ -1117,8 +1174,6 @@ void readSerialAdd2Buffer() {
   Send Mag X to Slave: "21,<(String)(float)>!"
   Send Mag Y to Slave: "22,<(String)(float)>!"
   Send Mag Z to Slave: "23,<(String)(float)>!"
-  Z Torquer On for Heat: "41,1!" //TODO
-  Z Torquer Off for Heat: "41,0!" //TODO
   Activate ACDS: "91,1!"
   Deactivate ACDS: "91,0!"
   Photo Burst Start: "101,1!"
@@ -1197,10 +1252,7 @@ bool requestFromSlave() {
           //printArray(segment, dataIndex);
           //Serial.println(dataIndex);
           //Serial.println("i: "+String(i));
-          Serial.print("[" + String(i) + "]");
-          if (dataIndex % DLSize < WireTransferSize) {
-            Serial.print("\n");
-          }
+          Serial.print("<>");
           if (dataIndex >= readSize - 1 && dataIndex > 16) { //if (i < 16) {
             Serial.println("\nTransfer Complete");
             lastRead = true;
@@ -1236,8 +1288,8 @@ bool requestFromSlave() {
             Serial.print("<SSV>");
             //Serial.println(": " + res);
           }
-          int data[11];
-          sectionReadToValue(res, data, 11);
+          int data[12];
+          sectionReadToValue(res, data, 12);
           MSH.MResets = data[0];
           MSH.AnalogTemp = data[1];
           MSH.LightSense = data[2];
@@ -1247,8 +1299,12 @@ bool requestFromSlave() {
           MSH.CurXPWM = data[6];
           MSH.CurYPWM = data[7];
           MSH.CurZPWM = data[8];
+          if (data[9] - MSH.numPhotos) {
+            Serial.println("\n" + String(data[9] - MSH.numPhotos) + " Photos Taken");
+          }
           MSH.numPhotos = data[9];
           MSH.CameraStatus = data[10];
+          MSH.CameraBurst = data[11];
           break;
         }
     }
@@ -1289,7 +1345,7 @@ int curComL = 0;
 String rocResponseRead() {
   long start = millis();
   //Serial.print(Serial1.available());
-  while (!Serial1.available() && (millis() - start > 4000));
+  while (!Serial1.available() && (millis() - start > 6000));
   delay(10);
   String responseString = "";
 
@@ -1307,10 +1363,10 @@ String rocResponseRead() {
 }
 
 bool rockOKParse() {
+  delay(10);
   String input = rocResponseRead();
-  //Serial.println("\n" + input);
+  Serial.println("#" + input + "#");
   bool valid = false;
-  //Serial.print(input);
   if (input[2] == 'O' && input[3] == 'K') {
     valid = true;
   }
@@ -1500,11 +1556,8 @@ void sendSBDIX(bool AL) {
 
 int downlinkSegment(int segIndex) {
   // 0 For Success, 1 for No Ready, 2 For No OK
-  //  uint8_t * Data = MSH.imageR.get(segIndex); //Old imageR code
-  //  int DataSize = MSH.imageR.sizeArray[segIndex];
   uint8_t* Data = MSH.imageR.getArr(segIndex); 
   int DataSize = MSH.imageR.getInt(segIndex);
-
   Serial.println("Beginning Downlink");
 
   Serial1.print("AT+SBDWB=");
@@ -1526,16 +1579,17 @@ int downlinkSegment(int segIndex) {
   }
 
   uint8_t checksum = 0;
-  for (int i = 0; i < DataSize; ++i)
-  {
+  for (int i = 0; i < DataSize; ++i) {
+    //uint8_t x = Data[i];
     Serial1.write(*Data);
-    checksum += (uint8_t) * Data;
+    checksum += (uint8_t) (*Data);
     *Data++;
   }
   //printArray(imageBuffer[0], DataSize);
   Serial1.write(checksum >> 8);
   Serial1.write(checksum & 0xFF);
   delay(100);
+  //TODO add error response
 
   //  /////////////////////////////////Ok?
   //  Serial.println("Response 2 >> ");
@@ -1571,9 +1625,10 @@ void print_binary(int v, int num_places) {
   }
 }
 
-int routineDownlink(String DLS) {
+int routineDownlink() {
   //Follow with SBDIX
   //0 is success, 1 is RB error, 2 is message is too long
+  String DLS = MSH.OutputString();
   if (DLS.length() < 120) {
     Serial1.print(("AT+SBDWT=" + DLS + "\r"));
     delay(400);
@@ -1591,24 +1646,6 @@ int routineDownlink(String DLS) {
     Serial.print(F("\nRDL Failed, Message Too Long: "));
     return 2;
   }
-}
-
-bool initializeRB() {
-  Serial1.print(F("ATE0\r")); //Disable Echo
-  delay(100);
-  Serial1.print(F("AT+SBDD2\r")); //Clear Buffers
-  delay(100);
-  Serial1.print(F("AT+SBDMTA=0\r")); //Disable RING alerts
-  delay(100);
-  Serial1.print(F("AT&K0\r")); //Disable Flow Control
-  delay(100);
-  Serial1.print(F("AT&Y0\r")); //Set This as default configuration
-  delay(100);
-  while (Serial1.available()) {
-    char c = (char)Serial1.read();
-    //Serial.print(c);
-  }
-  return responsePing(); //Ping to Check thats its working
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1697,6 +1734,7 @@ void setup() {
     MSH.hardwareAvTable[0] = false;
     Serial.println(F("IMU Initialization Failed"));
   } else {
+    delay(100);
     Serial.println(F("Determining IMU Zero Point. Do not move!"));
     MSH.hardwareAvTable[0] = true;
     delay(1000);
@@ -1721,7 +1759,7 @@ void setup() {
 
 
   Serial.println(F("\nInitializing RockBlock"));
-  if (initializeRB()) {
+  if (initializeRB(true)) {
     Serial.println(F("RockBlock Initialization Successful"));
   } else {
     Serial.println(F("RockBlock Initialization Failure"));
@@ -1798,6 +1836,7 @@ void loop() {
           //Attempt Segment Downlink
           if (MSH.currentSegment != 0) {
             Serial.println("\nSegment Downlink Successful");
+            MSH.SBDIXFails = 0;
           }
           MSH.currentSegment++;
 
@@ -1829,11 +1868,23 @@ void loop() {
             downlinkJustStaged = false;
           }
 
-          if (millis() - lastRBCheck > 1500) {
+          if (millis() - lastRBCheck > RBCheckTime) {
             Serial.print("<R2>");
-            Serial.print("<L:" + String((linkTime - millis()) / 1000) + ">");
+            Serial.print("<F:" + String(MSH.SBDIXFails) + ">");
             RBData(); //Can Reset MOStatus to 0
             lastRBCheck = millis();
+            //Check if SBDIX failed
+            if ((!MSH.AttemptingLink) && (MSH.MOStatus != 0)) { //SBDIX failed -> Retry
+              downlinkJustStaged = true;
+              Serial.print(F("\nSegment Downlink Failed. Retrying: "));
+              MSH.SBDIXFails++;
+              Serial.println(MSH.SBDIXFails);
+            }
+          }
+          if (MSH.SBDIXFails > 8) { //TODO set num of fails = RBCheckTime*100 ~20min
+            MSH.currentSegment--;
+            Serial.println(F("\nImage Downlink Failed due to no SBDIX Link"));
+            MSH.NextState = NORMAL_OPS;
           }
         }
       } else {
@@ -1852,6 +1903,16 @@ void loop() {
 
       //RockBlock Communication //TODO RBSleep -> LOW
       if (millis() - lastRBCheck >= RBCheckTime) {
+        //digitalWrite(RBSleep,HIGH);
+        if (POWER_SAVE) {
+          digitalWrite(RBSleep, HIGH);
+          //          Serial1.print("AT&E0\r");//Disable Echo
+          //          Serial1.print(F("AT+SBDD2\r")); //Clear Buffers
+          //          Serial1.print(F("AT&K0\r")); //Disable Flow Control
+          //          Serial1.print(F("AT+SBDMTA=0\r")); //Disable RING alerts
+          initializeRB(); //Two Command Conflict
+          delay(100);
+        }
         switch (MSH.RBCheckType) {
           case (0): //Ping RockBlock to ensure Unit Functionality
             if (!MSH.AttemptingLink) {
@@ -1863,7 +1924,7 @@ void loop() {
             }
             break;
           case (1): //Ping Iridium and Check for Messages, Send if any are outgoing
-            Serial.print("SBDIX Sent");
+            Serial.println("\nSBDIX Sent");
             sendSBDIX(true);
             break;
           case (2): //Fetch Incomming Command
@@ -1882,10 +1943,19 @@ void loop() {
         }
         lastRBCheck = millis();
         RBPings++;
+        if (POWER_SAVE && !MSH.AttemptingLink) {
+          digitalWrite(RBSleep, LOW);
+          //Serial.print("<D>");
+        }
       }
 
       //Print Camera Status for Testing
       if (millis() - lastCamTime > camCheckTime) {
+        if (POWER_SAVE) {
+          if (!MSH.CameraBurst && (millis() - CamActivatedTime > (MSH.BurstDuration + 2000))) { //If cam forced on, leave it on for BD+2s
+            digitalWrite(CamEnable, LOW);
+          }
+        }
         Serial.print("<C" + String(MSH.CameraStatus) + ">");
         lastCamTime = millis();
       }
@@ -1893,8 +1963,9 @@ void loop() {
       //Routine Downlinks
       if (millis() - lastDLTime >= DLTime || commandedDL) {
         if (testRDL || commandedDL) {
-          String DLSshort = MSH.OutputString();
-          routineDownlink(DLSshort);
+          //String DLSshort = MSH.OutputString();
+          //routineDownlink(DLSshort);
+          routineDownlink();
           Serial.println("\n" + MSH.toString());
         }
         lastDLTime = millis();
@@ -2162,9 +2233,14 @@ void loop() {
       break;
 
     case (LOW_POWER):
-      MSH.updateSensors(); //Fix Later
-      if (MSH.Battery * 2 >= HV_Threshold) {
+      digitalWrite(RBSleep, LOW);
+      MSH.updateSensors();
+      if (MSH.Battery >= HV_Threshold || (lowPowerEntry - millis() > ((long)(60 * 1000 * 60 * 2)))) {
         MSH.NextState = NORMAL_OPS;
+        normOpEntry = millis();
+        digitalWrite(RBSleep, HIGH);
+        delay(4000);
+        initializeRB();
       } else {
         delay(10000);
       }
@@ -2200,10 +2276,10 @@ void loop() {
     ledLastTime = millis();
   }
 
-  if (cycle % 600 == 0) {
-    ST = true;
-  }
-  if (ST && ((millis() - LastTimeTime) > 4000)) { //Prevent Screen Spam
+  //  if (cycle % 600 == 0) {
+  //    ST = true;
+  //  }
+  if (true && ((millis() - LastTimeTime) > TimeTime)) { //Prevent Screen Spam
     long t = millis();
     Serial.print("[" + String((millis() - LastTimeTime) / 1000.0) + "]"); //Cycle Lag
     String s = ("\n[System Time: " + String(t / (long)(60 * 60 * 1000)) + ":" +
@@ -2213,6 +2289,7 @@ void loop() {
     }
     s += (String((t / 1000) % ((long)1000) % 60) +
           "][" + String(MSH.State) + "]");
+    s += ("[" + String(freeRam() / 1024.0, 3) + "kB]");
     Serial.print(s);
     LastTimeTime = t;
     ST = false;

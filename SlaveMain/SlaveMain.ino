@@ -3,7 +3,7 @@
 #include <Adafruit_VC0706.h>
 #include <SPI.h>
 #include <SD.h>
-#include <b64.h>
+//#include <b64.h>
 
 ////Constant Initialization
 bool camStatus = false;
@@ -327,7 +327,8 @@ class slaveStatus
       String r1 = String(resets) + "," + String(Temp) + "," + String(Light) + "," +
                   String(CurXDir) + "," + String(CurYDir) + "," + String(CurZDir) + "," +
                   String(CurXPWM) + "," + String(CurYPWM) + "," + String(CurZPWM) + "," +
-                  String(numPhotos) + "," + String(camStatus) + "," + "|,,,";
+                  String(numPhotos) + "," + String(camStatus) + "," +
+                  String(CameraBurst) + ",|,,,";
       char r2[r1.length()];
       r1.toCharArray(r2, r1.length());
       Wire.write(r2, r1.length());
@@ -1151,6 +1152,32 @@ int ledState = HIGH;
 long ledLastTime = 0;
 long lastADCSTime = 0;
 File root;
+
+void lightSensorSwitch(int threshold){ // switch for activating *something* based on light sensor value
+  //int LightSRead = 9;
+  //int LEDWrite = 13;
+  
+  //pinMode(LightSRead, INPUT);
+  //pinMode(LEDWrite, OUTPUT);
+
+  //int threshold = 75;
+
+
+  int lightVal = map(analogRead(LightS), 970, 1023, 0, 100); // 970 is used as low value because light sensor baseline is very high (~89 if 0 is used as low value)
+
+  if (lightVal > threshold){ // TODO (what action should slave take when the light is greater than the threshold
+    //digitalWrite(LEDWrite, HIGH);
+  }
+  else{ // TODO (any action if not greater?)
+    //digitalWrite(LEDWrite, LOW);
+  }
+
+  //Serial.println(light);
+  
+}
+
+
+
 void setup() {
   Serial.begin(9600);
   //while (!Serial);
@@ -1213,13 +1240,16 @@ bool SoftwarePWM = false;
 bool disableT = false;
 bool thermalFlip = true;
 void loop() {
+
+  lightSensorSwitch(75); // TODO where and with what intensity to call lightSensorSwitch?
+  
   readSerialAdd2Buffer();
   //Serial.println(SDActive);
   StatusHolder.updatePassive();
   StatusHolder.ADCS_Active = false;
   //Test ADCS
   switch (StatusHolder.Thermal) {
-    case (1): //Too Cold
+    case (1): //Too Cold //TODO ensure master doesn't trigger if lowpower
       if (millis() - lastADCSTime >= 2000) {
         digitalWrite(CXY_Enable, HIGH);
         digitalWrite(CZ_Enable, HIGH);
@@ -1236,7 +1266,7 @@ void loop() {
         lastADCSTime = millis();
       }
       break;
-    case (0):
+    case (0): //Normal Temp
       if (StatusHolder.ADCS_Active) {
         if (millis() - lastADCSTime >= 2000) {
           if (millis() - lastADCSTime >= 2100) {

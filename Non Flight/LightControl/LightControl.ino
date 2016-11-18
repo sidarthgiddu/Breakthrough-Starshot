@@ -1,15 +1,15 @@
 #include <Adafruit_NeoPixel.h>
 
-#define BarLength 20
-#define BarsPerUnit 8
+#define BarLength 16
+#define BarsPerUnit 2
 uint8_t layout[3] = {1, 1, 1};
-#define NUM_COLUMNS 3
+#define NUM_COLUMNS 1
 
-#define Strip0Pin 8
+#define Strip0Pin 6
 #define Strip1Pin 9
 #define Strip2Pin 10
 
-#define Strip0Len (BarLength*BarsPerUnit*1)
+#define Strip0Len 32
 #define Strip1Len (BarLength*BarsPerUnit*1)
 #define Strip2Len (BarLength*BarsPerUnit*1)
 
@@ -90,7 +90,7 @@ commandBuffer cBuf;
 
 Adafruit_NeoPixel * column2Strip(int column) {
   //Indexes Start at 0
-  Adafruit_NeoPixel *p;
+  Adafruit_NeoPixel *p = 0 ;
   switch (column) {
     case (0):
       *p = Strip0;
@@ -144,13 +144,13 @@ void setPixel(int column, int index, int bar, intTuple color) {
 }
 
 void setAll(intTuple color) {
-  for (int i = 0; i < NUM_COLUMNS; i++) {
-    Adafruit_NeoPixel *p = column2Strip(i);
-    uint16_t n = p->numPixels();
-    for (int j = 0; j < n; j++) {
-      p->setPixelColor(j, color.r, color.g, color.b);
-    }
+  //for (int i = 0; i < NUM_COLUMNS; i++) {
+  Adafruit_NeoPixel *p = &Strip0;//column2Strip(i);
+  uint16_t n = p->numPixels();
+  for (int j = 0; j < n; j++) {
+    p->setPixelColor(j, color.r, color.g, color.b);
   }
+  //}
 }
 
 void showAll() {
@@ -263,7 +263,7 @@ void popCommands() {
   //Process all the Incoming Commands
   long start = millis();
   while (cBuf.openSpot > 0) {
-    //Serial.println (cBuf.openSpot - 1);
+    Serial.println(cBuf.openSpot);
     int currentCommand[2] = {cBuf.commandStack[cBuf.openSpot - 1][0], cBuf.commandStack[cBuf.openSpot - 1][1]};
     cBuf.commandStack[cBuf.openSpot - 1][0] = -1;
     cBuf.commandStack[cBuf.openSpot - 1][1] = -1;
@@ -272,24 +272,30 @@ void popCommands() {
     //Supported Commands
     switch (currentCommand[0]) {
       case (1): { //Full White
+          Serial.println("White!");
           intTuple c = intTuple(255, 255, 255);
           setAll(c);
           showAll();
           break;
         }
       case (2): { //Full Red
+          Serial.println("Red!");
           intTuple c = intTuple(255, 0, 0);
           setAll(c);
+          Serial.println("Red!");
           showAll();
+          Serial.println("Red!");
           break;
         }
       case (3): {//Full Green
+          Serial.println("Green!");
           intTuple c = intTuple(0, 255, 0);
           setAll(c);
           showAll();
           break;
         }
       case (4): { //Full Blue
+          Serial.println("Blue!");
           intTuple c = intTuple(0, 0, 255);
           setAll(c);
           showAll();
@@ -323,60 +329,69 @@ void readSerialAdd2Buffer() {
     if (isInputValid(comString)) {
       buildBuffer(comString);
       popCommands();
-
+      Serial.println("Done");
     } else {
-      Serial.println("Invalid Testing Command");
+      Serial.println("Invalid Command");
     }
   }
 }
 
 
-volatile int MODE = 0;
 void setup() {
+  Serial.begin(9600);
   // put your setup code here, to run once:
+  pinMode(6, OUTPUT);
   Strip0 = Adafruit_NeoPixel(Strip0Len, Strip0Pin);
-  Strip1 = Adafruit_NeoPixel(Strip1Len, Strip1Pin);
-  Strip2 = Adafruit_NeoPixel(Strip2Len, Strip2Pin);
+  Strip0.begin();
+  //Strip1 = Adafruit_NeoPixel(Strip1Len, Strip1Pin);
+  //Strip2 = Adafruit_NeoPixel(Strip2Len, Strip2Pin);
+  delay(100);
+  setAll(intTuple(0,255,0));
+  Strip0.show();
 }
 
+volatile int MODE = 0;
 int InternalState = 0;
 unsigned long cycle = 0;
 float EQ_BPS = 2;
 void loop() {
-  // put your main code here, to run repeatedly:
-  switch (MODE) {
-    case (0):
-      //Frozen (Do Nothing)
-      showAll();
-      delay(100);
-      break;
-    case (1): 
-        //Pulse
-        for (int i = 0; i < NUM_COLUMNS; i++) {
-          Adafruit_NeoPixel *p = column2Strip(i);
-          int n = p->numPixels();
-          int index = cycle % 512;
-          if (index < 256) {
-            for (uint16_t k = 0; k < n; i++) {
-              if (pixelActive(i, k)) {
-                p->setBrightness(pulse[index]);
-              }
-            }
-          } else {
-            for (int j = 255; j >= 0 ; j--) {
-              for (uint16_t k = 0; k < n; i++) {
-                if (pixelActive(i, k)) {
-                  p->setBrightness(pulse[255 - index]);
-                }
-              }
-            }
-          }
-          delay(50);
-          p->show();
-        }
-        break;
-      
-  }
+  readSerialAdd2Buffer();
+  Serial.println("Looped");
+  delay(1000);
+//  switch (MODE) {
+//    case (0):
+//      //Frozen (Do Nothing)
+//      showAll();
+//      delay(1000);
+//      break;
+//    case (1):
+//      //Pulse
+//      for (int i = 0; i < NUM_COLUMNS; i++) {
+//        Adafruit_NeoPixel *p = column2Strip(i);
+//        int n = p->numPixels();
+//        int index = cycle % 512;
+//        if (index < 256) {
+//          for (uint16_t k = 0; k < n; i++) {
+//            if (pixelActive(i, k)) {
+//              p->setBrightness(pulse[index]);
+//            }
+//          }
+//        } else {
+//          for (int j = 255; j >= 0 ; j--) {
+//            for (uint16_t k = 0; k < n; i++) {
+//              if (pixelActive(i, k)) {
+//                p->setBrightness(pulse[255 - index]);
+//              }
+//            }
+//          }
+//        }
+//        delay(50);
+//        p->show();
+//      }
+//      break;
+//    case (2):
+//      break;
+//  }
   cycle++;
 }
 
