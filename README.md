@@ -9,4 +9,6 @@ The master computer contains code that manages deployment (e.g. turn off/on magn
 The slave computer stores the readings from the different sensors on our mothership and "hands it over" to the master computer when the
 master computer requests data from the slave computer. 
 
-The master computer code is in the file FlightMain.ino and the slave computer code is in the file SlaveMain.ino 
+The master computer code is in file FlightMain.ino and the slave computer code is in file SlaveMain.ino. 
+
+One of the most recent additions to the FlightMain code is a RAMImage class. A JPEG camera on our mothership takes images when our nano spacecraft are released. The RAMImage class uses queues to store this image data onto the master computer so the image can be retrieved at a later point in time. 
