@@ -1,7 +1,7 @@
 # Breakthrough-Starshot Project Team
 
 Breakthrough Starshot is based off of Breakthrough Initiatives project to send nano spacecraft to nearby stars. A "mothership" deploys 
-multiple nano spacecraft. Then, they are accelerated to travel to celestial bodies. 
+multiple nano spacecraft. Then, these spacecraft are accelerated to travel to celestial bodies. 
 
 Our team's goal is to deploy nano spacecraft in an inexpensive manner. We are doing this by using ordinary electronics. The computers on
 our mothership are 2 Adafruit Microcontrollers. One Adafruit is known as the master computer, the other is known as the slave computer. 
